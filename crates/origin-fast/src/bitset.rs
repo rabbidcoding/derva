@@ -54,7 +54,7 @@ impl PackedBitset {
                 #[cfg(target_arch = "x86_64")]
                 {
                     if is_x86_feature_detected!("avx2") {
-                        // SAFETY: len is bounds-checked above; pointers are derived from
+                        // SAFETY [Owner: ORIGIN-Ω Architecture Core Team]: len is bounds-checked above; pointers are derived from
                         // distinct Vec allocations (non-overlapping); _loadu/_storeu chosen
                         // so alignment is not required.
                         unsafe {
@@ -79,7 +79,7 @@ impl PackedBitset {
                 #[cfg(target_arch = "x86_64")]
                 {
                     if is_x86_feature_detected!("avx2") {
-                        // SAFETY: same invariants as intersect.
+                        // SAFETY [Owner: ORIGIN-Ω Architecture Core Team]: same invariants as intersect.
                         unsafe {
                             self.bitop_avx2_intrinsics(other, dst, len, BitOp::Or);
                         }
@@ -102,7 +102,7 @@ impl PackedBitset {
                 #[cfg(target_arch = "x86_64")]
                 {
                     if is_x86_feature_detected!("avx2") {
-                        // SAFETY: same invariants as intersect.
+                        // SAFETY [Owner: ORIGIN-Ω Architecture Core Team]: same invariants as intersect.
                         unsafe {
                             self.bitop_avx2_intrinsics(other, dst, len, BitOp::AndNot);
                         }
@@ -119,6 +119,7 @@ impl PackedBitset {
 
     // ─── AVX2 Intrinsics Core ─────────────────────────────────────────────
 
+    // SAFETY [Owner: ORIGIN-Ω Architecture Core Team]: Internal AVX2 SIMD intrinsic routine called only after target_feature check
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "avx2")]
     unsafe fn bitop_avx2_intrinsics(
