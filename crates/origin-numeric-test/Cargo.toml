@@ -1,0 +1,10 @@
+[package]
+name = "origin-numeric-test"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+origin-core = { path = "../origin-core" }
+origin-numeric = { path = "../origin-numeric" }
