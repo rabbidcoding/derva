@@ -1,12 +1,14 @@
 #![allow(unsafe_code)]
 
-// ORIGIN-Ω ZERO — Fast Operations, SIMD Dispatch & Packed Bitset Subsystem
+// ORIGIN-Ω ZERO — Fast Operations, SIMD Dispatch, Packed Bitset & Cardinality Subsystem
 // INVARIANT: Dynamic ISA dispatch with pure-Rust reference fallback, explicit safety contracts for SIMD.
 
 pub mod bitset;
+pub mod cardinality;
 pub mod dispatch;
 
 pub use bitset::PackedBitset;
+pub use cardinality::CardinalityEngine;
 pub use dispatch::{CpuImplementation, FastOps};
 
 pub fn crate_name() -> &'static str {
