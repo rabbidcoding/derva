@@ -1,3 +1,4 @@
+# AUDIT-LENSES: Ken Thompson, Grace Hopper, Bill Gates
 # INVARIANT: Unsigned release artifacts are never published; 100% binaries have verifiable build attestation & SBOM.
 # KPI: SLSA Build Level 3 provenance attestations generated for all binaries.
 
@@ -19,7 +20,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      artifact-name: origin-zero-linux-amd64
+      artifact-name: origin-zero-release-dist
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -27,23 +28,18 @@ jobs:
       - name: Setup Toolchain
         uses: ./.github/actions/setup-origin
 
-      - name: Build Release Binary
-        run: cargo build --release --workspace
-
-      - name: Generate SBOM (Software Bill of Materials)
+      - name: Run Release Verification & Artifact Generation
         run: |
-          cargo install cargo-sbom --quiet || true
-          cargo sbom > origin-zero-sbom.spdx.json || echo '{"sbom": "origin-zero"}' > origin-zero-sbom.spdx.json
+          chmod +x tools/release_verify.sh
+          ./tools/release_verify.sh
 
       - name: Attest Build Provenance
         uses: actions/attest-build-provenance@v1
         with:
-          subject-path: 'target/release/origin-cli'
+          subject-path: 'dist/origin-cli'
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: origin-zero-linux-amd64
-          path: |
-            target/release/origin-cli
-            origin-zero-sbom.spdx.json
+          name: origin-zero-release-dist
+          path: dist/

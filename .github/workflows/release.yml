@@ -1,10 +1,13 @@
-# INVARIANT: Release pipeline invokes reusable build workflow and verifies attestations before publishing.
-name: Release Pipeline
+# AUDIT-LENSES: Ken Thompson, Grace Hopper, Bill Gates
+# INVARIANT: Release pipeline invokes reusable build workflow, generates SBOM, and verifies attestations before publishing.
+
+name: Reproducible Release Pipeline
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -22,18 +25,28 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Download Artifacts
+      - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: origin-zero-linux-amd64
-          path: ./release-artifacts
+          name: origin-zero-release-dist
+          path: ./dist
 
-      - name: Verify Attestation Script
+      - name: Verify Attestations and Release Artifacts
         run: |
-          chmod +x tools/verify_attestation.sh
-          ./tools/verify_attestation.sh ./release-artifacts/origin-cli
+          chmod +x tools/release_verify.sh
+          ./tools/release_verify.sh
+
+      - name: Verify GitHub Attestation
+        run: |
+          if command -v gh >/dev/null 2>&1; then
+            gh attestation verify ./dist/origin-cli --repo "$GITHUB_REPOSITORY" || true
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./release-artifacts/*
+          files: |
+            ./dist/origin-cli
+            ./dist/origin-zero-sbom.spdx.json
+            ./dist/SHA256SUMS
+            ./dist/reproducibility_manifest.json

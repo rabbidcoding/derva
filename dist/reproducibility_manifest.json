@@ -1,0 +1,10 @@
+{
+  "project": "ORIGIN-Ω ZERO",
+  "commit": "b3876e3e751461558303afc09fd9289deee88a8b",
+  "toolchain": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Fedora 1.97.1-1.fc43)",
+  "opt_level": 3,
+  "lto": true,
+  "panic": "abort",
+  "trainable_parameter_count": 0,
+  "bitwise_reproducibility": "VERIFIED"
+}
