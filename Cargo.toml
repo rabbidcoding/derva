@@ -15,6 +15,7 @@ members = [
     "crates/origin-plan",
     "crates/origin-oir",
     "crates/origin-codegen-rust",
+    "crates/origin-codegen-jax",
     "crates/origin-compiler",
     "crates/origin-fast",
     "crates/origin-runtime",
