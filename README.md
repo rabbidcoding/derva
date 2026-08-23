@@ -21,7 +21,7 @@
   [![JAX Coprocessor](https://img.shields.io/badge/JAX-Hardware_Acceleration-00599C?style=for-the-badge&logo=python&logoColor=white)](https://github.com/google/jax)
   [![State Algebra](https://img.shields.io/badge/State_Algebra-S%20%3D%20(G%2CC%2CE%2CU%2CO%2CB%2CZ)-000000?style=for-the-badge)](spec/state_algebra.md)
   [![Lattice Verification](https://img.shields.io/badge/Lattice-100%25_Fail--Closed-green?style=for-the-badge)](spec/status_lattice.md)
-  [![License](https://img.shields.io/badge/License-MIT_|_Apache--2.0-blue?style=for-the-badge)](LICENSE)
+  [![License](https://img.shields.io/badge/License-Apache_2.0-blue?style=for-the-badge)](LICENSE)
   [![Maintained By](https://img.shields.io/badge/Maintained_By-RabbidCoding-ff4081?style=for-the-badge)](https://github.com/rabbidcoding)
 
 </div>
@@ -198,4 +198,4 @@ Designed & Maintained for Post-Frontier Production.
 
 * **Architecture Core**: ORIGIN-Ω ZERO Architecture Team
 * **Maintained By**: [RabbidCoding](https://github.com/rabbidcoding)
-* **License**: Dual-licensed under MIT OR Apache-2.0
+* **License**: Apache 2.0
