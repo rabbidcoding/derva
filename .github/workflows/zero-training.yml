@@ -1,0 +1,15 @@
+name: Zero Training Guard Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  zero-training-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Zero-Train Guard Scanner
+        run: python3 tools/zero_train_guard.py

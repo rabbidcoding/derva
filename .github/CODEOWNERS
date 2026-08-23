@@ -1,0 +1,10 @@
+# CODEOWNERS for ORIGIN-Ω ZERO Post-Frontier Monorepo
+
+/crates/origin-core/     @architecture-team @kernel-owners
+/crates/origin-kernel/   @kernel-owners
+/crates/origin-store/    @kernel-owners
+/crates/origin-verify/   @verify-team
+/crates/origin-causal/   @causal-team
+/asm/                    @perf-owners @security-owners
+/.github/                @security-owners @architecture-team
+/spec/                   @architecture-team

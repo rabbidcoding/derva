@@ -1,0 +1,53 @@
+# ORIGIN-Ω ZERO — Claim Ledger (T002)
+# KPI: 100% of quantitative claims must map to a metric, baseline, target, gate, owner, kill_condition, and benchmark_id.
+
+claims:
+  - id: CLAIM-ZT-001
+    description: "Zero trainable parameters in authoritative runtime and numerical coprocessor."
+    metric: "trainable_parameter_count"
+    baseline: 0
+    target: 0
+    gate: "G00"
+    owner: "@architecture-team"
+    benchmark_id: "BENCH-ZERO-TRAIN-001"
+    kill_condition: "trainable_parameter_count > 0"
+
+  - id: CLAIM-EP-001
+    description: "Zero illegal status promotions to VERIFIED without formal witness proof."
+    metric: "illegal_verified_promotions"
+    baseline: 0
+    target: 0
+    gate: "G03"
+    owner: "@verify-team"
+    benchmark_id: "BENCH-EPISTEMIC-PROMOTION-001"
+    kill_condition: "illegal_verified_promotions > 0"
+
+  - id: CLAIM-CS-001
+    description: "Zero observational to causal promotions without intervention/mechanistic witness."
+    metric: "illegal_causal_promotions"
+    baseline: 0
+    target: 0
+    gate: "G05"
+    owner: "@causal-team"
+    benchmark_id: "BENCH-CAUSAL-WITNESS-001"
+    kill_condition: "illegal_causal_promotions > 0"
+
+  - id: CLAIM-PERF-001
+    description: "Mature fast path runtime yields at least 2.0x throughput vs pure scalar fallback."
+    metric: "e2e_speedup_ratio"
+    baseline: 1.0
+    target: 2.0
+    gate: "G08"
+    owner: "@perf-team"
+    benchmark_id: "BENCH-FAST-PATH-001"
+    kill_condition: "e2e_speedup_ratio < 1.15"
+
+  - id: CLAIM-POST-FRONTIER-001
+    description: "Verifiable zero-train reasoning achieves 2.0x reliability-per-compute over naive baselines."
+    metric: "reliability_per_compute_ratio"
+    baseline: 1.0
+    target: 2.0
+    gate: "G09"
+    owner: "@architecture-team"
+    benchmark_id: "BENCH-POST-FRONTIER-SCALE-001"
+    kill_condition: "reliability_per_compute_ratio < 1.10"

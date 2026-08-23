@@ -1,0 +1,11 @@
+[project]
+name = "origin-omega-zero"
+version = "0.1.0"
+description = "ORIGIN-Ω ZERO — Post-Frontier Zero-Training Verifiable Epistemic Computer"
+requires-python = ">=3.12"
+dependencies = [
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+    "numpy>=1.26.0",
+    "pyyaml>=6.0",
+]

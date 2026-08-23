@@ -1,0 +1,10 @@
+{
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Fedora 1.97.1-1.fc43)",
+  "cargo": "cargo 1.97.1 (c980f4866 2026-06-30) (Fedora 1.97.1-1.fc43)",
+  "python": "3.14.7",
+  "lockfile_hashes": {
+    "rust_toolchain_toml": "a5077a4586d6df5b6b269916a578767ec7d7dd78600c77d040be5ca4ac742c61",
+    "cargo_lock": "3e16db838c443473ce9de9717db822efe8435383e4329886712d4b636ded0e95",
+    "uv_lock": "644d92050998b868d8edf07ddff5393737ef2eb28019613accfbc3a9fc71ec03"
+  }
+}

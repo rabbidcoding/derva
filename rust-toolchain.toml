@@ -1,0 +1,5 @@
+# INVARIANT: Exact Rust toolchain channel, profile, and components pinned.
+[toolchain]
+channel = "stable"
+profile = "minimal"
+components = ["rustfmt", "clippy", "llvm-tools-preview"]

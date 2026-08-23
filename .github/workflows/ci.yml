@@ -1,0 +1,15 @@
+# INVARIANT: Minimal explicit permissions; delegates to reusable CI workflow.
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: ./.github/workflows/_ci.yml

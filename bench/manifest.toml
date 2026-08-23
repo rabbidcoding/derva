@@ -1,0 +1,29 @@
+# ORIGIN-Ω ZERO — Benchmark Manifest (T009)
+version = "1.0.0"
+
+[[benchmarks]]
+id = "BENCH-LOOKUP-001"
+name = "Graph Index Lookup Latency"
+warmups = 100
+samples = 1000
+max_cv = 0.03
+seed = 42
+target_p99_us = 200
+
+[[benchmarks]]
+id = "BENCH-REASON-001"
+name = "Zero-Train Epistemic Reasoning Throughput"
+warmups = 50
+samples = 500
+max_cv = 0.03
+seed = 42
+target_solve_rate = 0.95
+
+[[benchmarks]]
+id = "BENCH-FAST-PATH-001"
+name = "Two-Speed Fast Path Dispatch Throughput"
+warmups = 100
+samples = 1000
+max_cv = 0.03
+seed = 42
+target_speedup_ratio = 2.0

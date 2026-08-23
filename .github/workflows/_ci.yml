@@ -1,0 +1,38 @@
+# INVARIANT: Reusable, deterministic CI workflow with zero duplicated job definitions.
+# KPI: 100% pass on fmt, clippy, tests, zero-training guard, claims-lint, and doc-tests.
+
+name: Reusable CI Workflow
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  ci-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Toolchain
+        uses: ./.github/actions/setup-origin
+
+      - name: Zero-Training Invariant Guard
+        run: python3 tools/zero_train_guard.py
+
+      - name: Claim Ledger Lint
+        run: python3 tools/claims_lint.py
+
+      - name: Cargo Format Check
+        run: cargo fmt --check
+
+      - name: Cargo Clippy Check
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Cargo Workspace Tests
+        run: cargo test --workspace
+
+      - name: Cargo Doc Tests
+        run: cargo doc --workspace --no-deps

@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/origin-core",
+    "crates/origin-kernel",
+    "crates/origin-store",
+    "crates/origin-verify",
+    "crates/origin-logic",
+    "crates/origin-constraints",
+    "crates/origin-search",
+    "crates/origin-egraph",
+    "crates/origin-reason",
+    "crates/origin-causal",
+    "crates/origin-plan",
+    "crates/origin-oir",
+    "crates/origin-codegen-rust",
+    "crates/origin-compiler",
+    "crates/origin-fast",
+    "crates/origin-runtime",
+    "crates/origin-cli",
+    "crates/origin-bench",
+    "crates/origin-chaos",
+    "crates/origin-modelcheck",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["ORIGIN-Ω Architecture Core Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/origin-omega/origin-zero"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

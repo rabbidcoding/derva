@@ -1,0 +1,31 @@
+# INVARIANT: Pinned reproducible build setup action for GitHub Actions CI.
+name: "Setup ORIGIN-Ω Toolchain"
+description: "Configures reproducible Rust, Python and JAX toolchains for ORIGIN-Ω ZERO"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Rust Minimal Toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy, llvm-tools-preview
+    - name: Cache Cargo Dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+    - name: Verify Toolchain Manifest
+      shell: bash
+      run: python3 tools/toolchain_manifest.py

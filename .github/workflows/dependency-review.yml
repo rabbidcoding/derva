@@ -1,0 +1,23 @@
+# INVARIANT: Block pull requests introducing High or Critical supply chain vulnerabilities.
+# KPI: 0 new High/Critical vulnerable dependencies merged.
+
+name: "Dependency Review"
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Dependency Review Action
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

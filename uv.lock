@@ -1,0 +1,24 @@
+# INVARIANT: Pinned Python lockfile graph for reproducible toolchain builds.
+version = 1
+revision = 1
+requires-python = ">=3.12"
+
+[[package]]
+name = "jax"
+version = "0.4.30"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "jaxlib"
+version = "0.4.30"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "numpy"
+version = "1.26.4"
+source = { registry = "https://pypi.org/simple" }
+
+[[package]]
+name = "pyyaml"
+version = "6.0.1"
+source = { registry = "https://pypi.org/simple" }
