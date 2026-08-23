@@ -1,10 +1,14 @@
 {
-  "name": "production-main-protection",
+  "name": "ORIGIN-Ω ZERO Production Ruleset Lock",
   "target": "branch",
   "enforcement": "active",
+  "bypass_actors": [],
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/main"],
+      "include": [
+        "refs/heads/main",
+        "refs/tags/v*"
+      ],
       "exclude": []
     }
   },
@@ -20,7 +24,9 @@
       "parameters": {
         "required_approving_review_count": 1,
         "dismiss_stale_reviews_on_push": true,
-        "require_code_owner_review": true
+        "require_code_owner_review": true,
+        "require_last_push_approval": true,
+        "required_review_thread_resolution": true
       }
     },
     {
@@ -28,10 +34,29 @@
       "parameters": {
         "strict_required_status_checks_policy": true,
         "required_status_checks": [
-          {"context": "zero-training"},
-          {"context": "G00"},
-          {"context": "ci"}
+          { "context": "zero-training" },
+          { "context": "ci" },
+          { "context": "security-audit" },
+          { "context": "gate-g00" },
+          { "context": "gate-g01" },
+          { "context": "gate-g02" },
+          { "context": "gate-g03" },
+          { "context": "gate-g04" },
+          { "context": "gate-g05" },
+          { "context": "gate-g06" },
+          { "context": "gate-g07" },
+          { "context": "gate-g08" },
+          { "context": "gate-g09" }
         ]
+      }
+    },
+    {
+      "type": "merge_queue",
+      "parameters": {
+        "grouping_strategy": "ALL_GREEN",
+        "min_entries_to_merge": 1,
+        "max_entries_to_build": 5,
+        "check_response_timeout_minutes": 60
       }
     }
   ]
