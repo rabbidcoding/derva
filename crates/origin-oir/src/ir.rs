@@ -71,7 +71,7 @@ impl OirType {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum EffectKind {
     Pure = 0,
     Read = 1,
