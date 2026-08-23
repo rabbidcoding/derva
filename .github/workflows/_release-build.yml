@@ -34,7 +34,7 @@ jobs:
           ./tools/release_verify.sh
 
       - name: Attest Build Provenance
-        uses: actions/attest-build-provenance@v1
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/origin-cli'
 
