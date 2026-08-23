@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 
 use origin_core::{ObjectKind, Status, ORID};
-use origin_evidence::{CorrelationDeduplicator, Derivation, EvidenceRecord, ProvenanceHypergraph, TrustPolicy};
+use origin_evidence::{
+    CorrelationDeduplicator, Derivation, EvidenceRecord, ProvenanceHypergraph, TrustPolicy,
+};
 use origin_verify::{ContradictionEngine, ObligationResolution, ObligationRuntime};
 
 #[test]
@@ -51,7 +53,8 @@ fn test_g03_adversarial_suite_1e6_cases_zero_illegal_promotions() {
         // 2. Check self-witnessing obligation
         if is_self_witness_case {
             let target_orid = ev.id();
-            let mut obligation = ObligationRuntime::new(target_orid, "adversarial_check", 1000, 3600);
+            let mut obligation =
+                ObligationRuntime::new(target_orid, "adversarial_check", 1000, 3600);
             let res = obligation.resolve(ObligationResolution {
                 witness: target_orid,
                 verifier: "adversarial_bot".to_string(),
@@ -90,8 +93,14 @@ fn test_g03_adversarial_suite_1e6_cases_zero_illegal_promotions() {
         }
     }
 
-    assert_eq!(illegal_promotions, 0, "Illegal VERIFIED promotions must be exactly 0");
-    assert_eq!(circular_acceptances, 0, "Circular provenance acceptances must be exactly 0");
+    assert_eq!(
+        illegal_promotions, 0,
+        "Illegal VERIFIED promotions must be exactly 0"
+    );
+    assert_eq!(
+        circular_acceptances, 0,
+        "Circular provenance acceptances must be exactly 0"
+    );
 
     // 5. Copied-source overcount check
     let mut copies_set = Vec::new();
@@ -108,7 +117,10 @@ fn test_g03_adversarial_suite_1e6_cases_zero_illegal_promotions() {
         copies_set.push(copy_ev);
     }
     let independent_count = deduplicator.independent_support_count(&provenance, &copies_set);
-    assert_eq!(independent_count, 1, "100 copies must yield independent_support_count == 1 (0 overcount)");
+    assert_eq!(
+        independent_count, 1,
+        "100 copies must yield independent_support_count == 1 (0 overcount)"
+    );
 
     // 6. Proof replay = 100% check
     let proof_a = provenance.why(&root_orid).unwrap();

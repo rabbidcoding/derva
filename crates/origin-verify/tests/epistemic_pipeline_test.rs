@@ -3,7 +3,9 @@
 
 use origin_constraints::{Constraint, ReferenceSolver, SolveResult};
 use origin_core::{ObjectKind, Status, ORID};
-use origin_evidence::{CorrelationDeduplicator, Derivation, EvidenceRecord, ProvenanceHypergraph, TrustPolicy};
+use origin_evidence::{
+    CorrelationDeduplicator, Derivation, EvidenceRecord, ProvenanceHypergraph, TrustPolicy,
+};
 use origin_logic::{Fact, FixedPointEngine, HornRule};
 use origin_verify::{ContradictionEngine, ObligationResolution, ObligationRuntime};
 
@@ -57,7 +59,8 @@ fn test_epistemic_pipeline_adversarial_suite_zero_illegal_promotions() {
 
     // 5. Obligation Runtime
     let witness_orid = ORID::compute(ObjectKind::Evidence, b"external_verifier_witness");
-    let mut obligation = ObligationRuntime::new(claim_orid, "telemetry_within_range", 1700000000, 3600);
+    let mut obligation =
+        ObligationRuntime::new(claim_orid, "telemetry_within_range", 1700000000, 3600);
     obligation
         .resolve(ObligationResolution {
             witness: witness_orid,
@@ -84,7 +87,10 @@ fn test_epistemic_pipeline_adversarial_suite_zero_illegal_promotions() {
     contradiction_engine
         .register_contradiction(claim_orid, opposing_claim, "direct_conflict", 1700000100)
         .unwrap();
-    assert_eq!(contradiction_engine.get_status(&claim_orid), Status::Contested);
+    assert_eq!(
+        contradiction_engine.get_status(&claim_orid),
+        Status::Contested
+    );
 
     // 8. Adversarial Attack 3: Copied source overcount attack
     let support_count = deduplicator.independent_support_count(&provenance, &[ev]);
