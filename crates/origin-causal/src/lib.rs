@@ -5,6 +5,7 @@
 
 pub mod compose;
 pub mod counterfactual;
+pub mod interaction;
 pub mod journal;
 pub mod operator;
 pub mod promotion;
@@ -14,6 +15,9 @@ pub use compose::{
     OperatorCompositionChecker,
 };
 pub use counterfactual::{Capability, CounterfactualFork, StateCounterfactualExt};
+pub use interaction::{
+    DiagnosticTag, InteractionDiagnosticChecker, OrderInteractionDiagnostic, StateDelta,
+};
 pub use journal::{
     EnvironmentReceipt, InterventionJournal, InterventionOutcome, InterventionRecord, JournalError,
 };
