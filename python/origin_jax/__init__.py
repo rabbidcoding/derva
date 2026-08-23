@@ -15,6 +15,11 @@ from .interval import (
     sub_intervals,
     mul_intervals,
 )
+from .query_score import (
+    worst_case_query_score_one,
+    score_queries_batch_jit,
+    select_best_query_vectorized,
+)
 from .schema import (
     CandidateBatch,
     IntervalBatch,
@@ -39,4 +44,7 @@ __all__ = [
     "simulate_one_counterfactual",
     "simulate_batch_jit",
     "CounterfactualSimulationEngine",
+    "worst_case_query_score_one",
+    "score_queries_batch_jit",
+    "select_best_query_vectorized",
 ]
