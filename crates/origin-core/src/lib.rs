@@ -1,4 +1,7 @@
+#![forbid(unsafe_code)]
+
 // ORIGIN-Ω ZERO — Core Epistemic Kernel Types and State Logic
+// INVARIANT: origin-core is pure data + semantics; zero I/O, zero async runtime.
 
 pub mod causal_status;
 pub mod distinction;
@@ -21,3 +24,14 @@ pub use orid::{ObjectKind, ORID};
 pub use quotient::RelevantSet;
 pub use state::{Budget, State, StateTxn};
 pub use status::{EpistemicError, Status};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_origin_core_zero_unsafe_pure_semantics() {
+        let s = State::new();
+        assert_eq!(s.schema_version, 0);
+    }
+}

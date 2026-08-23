@@ -7,3 +7,5 @@ license.workspace = true
 
 [dependencies]
 origin-core = { path = "../origin-core" }
+origin-kernel = { path = "../origin-kernel" }
+origin-verify = { path = "../origin-verify" }
