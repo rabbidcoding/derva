@@ -4,7 +4,7 @@
   "python": "3.14.7",
   "lockfile_hashes": {
     "rust_toolchain_toml": "a5077a4586d6df5b6b269916a578767ec7d7dd78600c77d040be5ca4ac742c61",
-    "cargo_lock": "00e68a97927ae6a820912926bb3528945f4fbf1ff1a7e5f777029a3d3cf4327a",
+    "cargo_lock": "ed2b8cf9173b556caf3926b6c6fba259512e981112d694fca8a71fbf4f90c663",
     "uv_lock": "644d92050998b868d8edf07ddff5393737ef2eb28019613accfbc3a9fc71ec03"
   }
 }
