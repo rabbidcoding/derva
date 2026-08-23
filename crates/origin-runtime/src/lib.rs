@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 
-// ORIGIN-Ω ZERO — Runtime Kernel Orchestrator & Fast Artifact Execution Engine
-// INVARIANT: Pure-Rust safe execution with mandatory fallback to slow path on guard rejection or stale dependencies.
+// ORIGIN-Ω ZERO — Runtime Kernel Orchestrator, Fast Execution & Slow Deliberative Subsystem
+// INVARIANT: Pure-Rust safe execution with mandatory fallback to slow path; deterministic event logging for deliberation.
 
 pub mod fast;
+pub mod slow;
 
 pub use fast::{ExecutionPath, ExecutionResult, FastArtifactExecutor};
+pub use slow::{DeliberationError, EventRecord, Proposal, SlowDeliberativeRuntime, StepKind, VerifiedAction};
 
 pub fn crate_name() -> &'static str {
     "origin-runtime"
