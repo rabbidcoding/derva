@@ -7,3 +7,4 @@ license.workspace = true
 
 [dependencies]
 origin-core = { path = "../origin-core" }
+sha2 = "0.10"
