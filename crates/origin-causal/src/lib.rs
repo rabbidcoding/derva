@@ -4,8 +4,10 @@
 // Causal Operators, Counterfactuals & Structural Causal Models.
 
 pub mod operator;
+pub mod promotion;
 
 pub use operator::{CausalOperator, Cost, EffectId, OperatorError, PredicateId, Risk, SchemaId};
+pub use promotion::{CausalPromotionValidator, PromotionRecord};
 
 pub fn crate_name() -> &'static str {
     "origin-causal"

@@ -15,7 +15,7 @@ pub mod quotient;
 pub mod state;
 pub mod status;
 
-pub use causal_status::{CausalError, CausalStatus};
+pub use causal_status::{CausalError, CausalStatus, CausalWitness, CausalWitnessKind};
 pub use codec::{
     decode_bytes_bounded, decode_exact, decode_str_bounded, decode_varint, encode_bytes_bounded,
     encode_str_bounded, encode_varint, CodecError, DEFAULT_MAX_BOUND,
