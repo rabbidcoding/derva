@@ -140,16 +140,22 @@ impl OirInstruction {
     /// Enforces strict opcode and result type matrix validation
     #[inline(always)]
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_and_inherent_effect().map(|_| ())
+    }
+
+    /// Enforces strict opcode and result type matrix validation and returns inherent effect
+    #[inline(always)]
+    pub fn validate_and_inherent_effect(&self) -> Result<EffectKind, String> {
         match (self.opcode, self.result.ty) {
-            (OpCode::Observe, OirType::Observation) => Ok(()),
-            (OpCode::Propose, OirType::Claim) => Ok(()),
-            (OpCode::Relate, OirType::Relation) => Ok(()),
-            (OpCode::Refine, OirType::Refinement) => Ok(()),
-            (OpCode::Query, OirType::Query) => Ok(()),
-            (OpCode::Intervene, OirType::Intervention) => Ok(()),
-            (OpCode::Verify, OirType::VerifiedClaim) => Ok(()),
-            (OpCode::Commit, OirType::Commitment) => Ok(()),
-            (OpCode::Compile, OirType::CompiledArtifact) => Ok(()),
+            (OpCode::Observe, OirType::Observation) => Ok(EffectKind::Observe),
+            (OpCode::Propose, OirType::Claim) => Ok(EffectKind::Pure),
+            (OpCode::Relate, OirType::Relation) => Ok(EffectKind::Compile),
+            (OpCode::Refine, OirType::Refinement) => Ok(EffectKind::Pure),
+            (OpCode::Query, OirType::Query) => Ok(EffectKind::Read),
+            (OpCode::Intervene, OirType::Intervention) => Ok(EffectKind::Intervene),
+            (OpCode::Verify, OirType::VerifiedClaim) => Ok(EffectKind::Pure),
+            (OpCode::Commit, OirType::Commitment) => Ok(EffectKind::Commit),
+            (OpCode::Compile, OirType::CompiledArtifact) => Ok(EffectKind::Compile),
             (op, ty) => Err(format!(
                 "Invalid opcode/type combination: opcode {:?} cannot produce type {:?}",
                 op, ty

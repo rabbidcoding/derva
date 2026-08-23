@@ -4,11 +4,30 @@
 // INVARIANT: OIR Verifier & Invariant Pass enforcing TCB epistemic lattice rules, obligation witness validity, provenance, and budget integrity.
 // KPI: Malformed semantic IR accepted = 0; Verifier deterministic 100%; Verifier p99 < 5ms for 100k-op module target.
 
-use crate::effectcheck::{EffectError, OirEffectChecker};
+use crate::effectcheck::EffectError;
 use crate::ir::{EffectKind, OirModule};
 use crate::typecheck::TypeError;
 use origin_core::{opcode::OpCode, state::Budget, status::Status};
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
+
+#[derive(Default)]
+pub struct FastStringHasher(u64);
+
+impl std::hash::Hasher for FastStringHasher {
+    #[inline(always)]
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    #[inline(always)]
+    fn write(&mut self, bytes: &[u8]) {
+        let mut hash = if self.0 == 0 { 0xcbf29ce484222325 } else { self.0 };
+        for &byte in bytes {
+            hash = hash.wrapping_mul(0x100000001b3) ^ (byte as u64);
+        }
+        self.0 = hash;
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VerifierError {
@@ -71,14 +90,16 @@ impl OirVerifier {
         }
         budget.cpu_steps_remaining -= num_ops;
 
-        let mut scope: HashMap<&str, crate::ir::OirType> =
-            HashMap::with_capacity(module.instructions.len());
+        let mut scope: HashMap<&str, crate::ir::OirType, BuildHasherDefault<FastStringHasher>> =
+            HashMap::with_capacity_and_hasher(module.instructions.len(), BuildHasherDefault::<FastStringHasher>::default());
 
         let has_known_funcs = !known_functions.is_empty();
 
         for (idx, inst) in module.instructions.iter().enumerate() {
-            // 1. Invariant check: Opcode result type matrix
-            inst.validate().map_err(VerifierError::MalformedInstruction)?;
+            // 1. Single-pass invariant check and inherent effect extraction
+            let inherent_effect = inst
+                .validate_and_inherent_effect()
+                .map_err(VerifierError::MalformedInstruction)?;
 
             // 2. Operand checks: scope bindings, type match, self-witnessing, and transitive effects
             if !inst.operands.is_empty() {
@@ -126,9 +147,8 @@ impl OirVerifier {
                 return Err(VerifierError::MalformedProvenance);
             }
 
-            // 3. Effect check
-            let inst_effect = OirEffectChecker::opcode_inherent_effect(inst.opcode);
-            let effective = inst_effect.max(inst.effect);
+            // 3. Effect containment check
+            let effective = inherent_effect.max(inst.effect);
             if effective > max_allowed_effect {
                 return Err(VerifierError::EffectError(EffectError::Escalation {
                     instruction_index: idx,
@@ -288,6 +308,16 @@ mod tests {
             )
             .unwrap();
             module.instructions.push(inst);
+        }
+
+        // Warmup trial
+        {
+            let mut budget = Budget {
+                cpu_steps_remaining: 500_000,
+                wall_time_ms_limit: 10_000,
+                max_allocations: 100_000,
+            };
+            let _ = OirVerifier::verify_module(&module, EffectKind::Observe, &known, &mut budget);
         }
 
         let mut durations = Vec::new();
