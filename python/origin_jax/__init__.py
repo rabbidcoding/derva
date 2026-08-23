@@ -10,6 +10,7 @@ from .counterfactual import (
     simulate_batch_jit,
     CounterfactualSimulationEngine,
 )
+from .export import StableHLOExporter
 from .hypothesis import (
     score_one_hypothesis,
     score_batch_jit,
@@ -55,4 +56,5 @@ __all__ = [
     "bounded_step_fn",
     "run_scan_loop",
     "run_while_loop",
+    "StableHLOExporter",
 ]

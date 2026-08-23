@@ -1,0 +1,8 @@
+{
+  "kernel_name": "dummy_kernel",
+  "schema_hash": "sha256:dummy_schema_v1",
+  "source_orid": "orid:00112233445566778899aabbccddeeff",
+  "source_hash": "cb64ca5513581ca48df04524129b8546acf0a4586bf91ce5bc8d29e2d3495fd7",
+  "jax_version": "0.10.1",
+  "backend": "gpu"
+}

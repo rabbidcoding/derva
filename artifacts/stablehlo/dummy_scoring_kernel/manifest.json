@@ -1,0 +1,7 @@
+{
+  "kernel_name": "dummy_scoring_kernel",
+  "schema_hash": "adbeacfb0fa561c0ae5117d06ec0d297fcab90c15d3411f72d7a873ba95d09e0",
+  "source_hash": "f18e056f56ddd8cecdc6fa1a2c8ac2fbb0f52874e1e99647041d9005d5d187f8",
+  "jax_version": "0.10.1",
+  "backend": "gpu"
+}
