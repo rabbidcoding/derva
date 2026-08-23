@@ -1,5 +1,10 @@
 from .boundary import JAXNumericalBoundary, trainable_parameter_count
 from .coprocessor import evaluate_vector_field
+from .counterfactual import (
+    simulate_one_counterfactual,
+    simulate_batch_jit,
+    CounterfactualSimulationEngine,
+)
 from .hypothesis import (
     score_one_hypothesis,
     score_batch_jit,
@@ -31,4 +36,7 @@ __all__ = [
     "add_intervals",
     "sub_intervals",
     "mul_intervals",
+    "simulate_one_counterfactual",
+    "simulate_batch_jit",
+    "CounterfactualSimulationEngine",
 ]
