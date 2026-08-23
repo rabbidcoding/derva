@@ -3,8 +3,10 @@
 // ORIGIN-Ω ZERO Subsystem: origin-kernel
 // Authoritative execution kernel and transactional state transition engine.
 
+pub mod budget;
 pub mod txn;
 
+pub use budget::{BudgetError, ResourceBudget, StepCost};
 pub use origin_core::{Claim, Evidence, Obligation, Operator, State, StateTxn};
 pub use txn::{AtomicTxnEngine, TxnEngineError};
 
