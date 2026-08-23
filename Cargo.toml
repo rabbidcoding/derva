@@ -23,6 +23,7 @@ members = [
     "crates/origin-chaos",
     "crates/origin-modelcheck",
     "bench/zero_train_reasoning",
+    "bench/causal_worlds",
 ]
 
 [workspace.package]

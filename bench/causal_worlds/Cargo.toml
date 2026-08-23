@@ -1,0 +1,11 @@
+[package]
+name = "bench-causal-worlds"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+origin-core = { path = "../../crates/origin-core" }
+origin-causal = { path = "../../crates/origin-causal" }
+origin-plan = { path = "../../crates/origin-plan" }
