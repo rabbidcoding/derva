@@ -1,5 +1,10 @@
 from .boundary import JAXNumericalBoundary, trainable_parameter_count
 from .coprocessor import evaluate_vector_field
+from .control import (
+    bounded_step_fn,
+    run_scan_loop,
+    run_while_loop,
+)
 from .counterfactual import (
     simulate_one_counterfactual,
     simulate_batch_jit,
@@ -47,4 +52,7 @@ __all__ = [
     "worst_case_query_score_one",
     "score_queries_batch_jit",
     "select_best_query_vectorized",
+    "bounded_step_fn",
+    "run_scan_loop",
+    "run_while_loop",
 ]
