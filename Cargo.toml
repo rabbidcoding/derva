@@ -22,6 +22,7 @@ members = [
     "crates/origin-bench",
     "crates/origin-chaos",
     "crates/origin-modelcheck",
+    "crates/origin-numeric",
     "bench/zero_train_reasoning",
     "bench/causal_worlds",
 ]
