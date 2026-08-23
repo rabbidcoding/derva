@@ -6,7 +6,7 @@
   "documentNamespace": "https://github.com/rabbidcoding/derva/spdx/v0.1.0",
   "creationInfo": {
     "creators": ["Organization: ORIGIN-Ω Architecture Core Team"],
-    "created": "2026-08-23T09:27:06Z"
+    "created": "2026-08-23T09:35:52Z"
   },
   "packages": [
     {"name": "origin-core", "versionInfo": "0.1.0", "licenseConcluded": "MIT OR Apache-2.0"},
