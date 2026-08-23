@@ -458,6 +458,44 @@ impl BaselineTracker {
         }
     }
 
+    pub fn derva_type_micro_f1(&self) -> f64 {
+        let mut total_tp = 0;
+        let mut total_fp = 0;
+        let mut total_fn = 0;
+        for conf in self.derva_confusions.values() {
+            total_tp += conf.true_positives;
+            total_fp += conf.false_positives;
+            total_fn += conf.false_negatives;
+        }
+        let denom = 2 * total_tp + total_fp + total_fn;
+        if denom == 0 {
+            0.0
+        } else {
+            (2 * total_tp) as f64 / denom as f64
+        }
+    }
+
+    pub fn derva_observed_type_macro_f1(&self) -> f64 {
+        let mut sum_f1 = 0.0;
+        let mut count = 0;
+        for (cat, conf) in &self.derva_confusions {
+            let support = self.category_counts.get(cat).cloned().unwrap_or(0);
+            if support > 0 {
+                sum_f1 += conf.f1_score();
+                count += 1;
+            }
+        }
+        if count == 0 {
+            0.0
+        } else {
+            sum_f1 / count as f64
+        }
+    }
+
+    pub fn category_support(&self) -> HashMap<EventCategory, u64> {
+        self.category_counts.clone()
+    }
+
     pub fn learning_slope(&self) -> f64 {
         let n = self.window_f1_scores.len();
         if n < 2 {
@@ -483,7 +521,60 @@ impl BaselineTracker {
             ((n as f64 * sum_xy) - (sum_x * sum_y)) / denom
         }
     }
+
+    /// Block Bootstrap 95% Confidence Interval for Learning Slope
+    pub fn learning_slope_bootstrap_ci_95(&self) -> (f64, f64) {
+        let n = self.window_f1_scores.len();
+        if n < 3 {
+            let slope = self.learning_slope();
+            return (slope, slope);
+        }
+
+        let mut bootstrapped_slopes = Vec::with_capacity(1000);
+        let mut lcg: u64 = 0x9E3779B97F4A7C15;
+
+        for _ in 0..1000 {
+            let mut sample = Vec::with_capacity(n);
+            for _ in 0..n {
+                lcg = lcg.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                let idx = ((lcg >> 32) as usize) % n;
+                sample.push(self.window_f1_scores[idx]);
+            }
+
+            let mut sum_x = 0.0;
+            let mut sum_y = 0.0;
+            let mut sum_xy = 0.0;
+            let mut sum_xx = 0.0;
+            for (i, &y) in sample.iter().enumerate() {
+                let x = i as f64;
+                sum_x += x;
+                sum_y += y;
+                sum_xy += x * y;
+                sum_xx += x * x;
+            }
+            let denom = (n as f64 * sum_xx) - (sum_x * sum_x);
+            let s = if denom == 0.0 { 0.0 } else { ((n as f64 * sum_xy) - (sum_x * sum_y)) / denom };
+            bootstrapped_slopes.push(s);
+        }
+
+        bootstrapped_slopes.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let lower = bootstrapped_slopes[25];  // 2.5 percentile
+        let upper = bootstrapped_slopes[975]; // 97.5 percentile
+        (lower, upper)
+    }
+
+    pub fn f1_early_vs_late(&self) -> (f64, f64, f64) {
+        let n = self.window_f1_scores.len();
+        if n == 0 {
+            return (0.0, 0.0, 0.0);
+        }
+        let early = self.window_f1_scores.first().cloned().unwrap_or(0.0);
+        let late = self.window_f1_scores.last().cloned().unwrap_or(0.0);
+        let delta = late - early;
+        (early, late, delta)
+    }
 }
+
 
 
 pub struct ArcBridgeEngine {
@@ -524,6 +615,22 @@ impl ArcBridgeEngine {
             is_frozen: false,
         }
     }
+
+    pub fn count_generalized_schemas(&self) -> usize {
+        let mut schemas = std::collections::HashSet::new();
+        for h in &self.active_hypotheses {
+            let event_type = match &h.predicted_event {
+                GridEvent::ObjectMoved { .. } => "Moved",
+                GridEvent::ColorChanged { .. } => "ColorChanged",
+                GridEvent::ObjectAppeared { .. } => "Appeared",
+                GridEvent::ObjectDisappeared { .. } => "Disappeared",
+                GridEvent::GridRestructured { .. } => "NoChange",
+            };
+            schemas.insert((h.action_id, event_type, h.requires_feasibility));
+        }
+        schemas.len()
+    }
+
 
 
     /// Single Authoritative Spatial Feasibility Evaluator for Sub-Gate G10.2-C1.1
@@ -727,22 +834,38 @@ impl ArcBridgeEngine {
                 self.baseline_tracker.record_prediction(expected_category, actual_category, outcome, receipt.precondition_witness);
 
                 let (best_b_name, best_b_score) = self.baseline_tracker.best_baseline_macro_f1();
-                let derva_f1 = self.baseline_tracker.derva_type_macro_f1();
+                let derva_macro_f1 = self.baseline_tracker.derva_type_macro_f1();
+                let derva_micro_f1 = self.baseline_tracker.derva_type_micro_f1();
+                let derva_obs_macro_f1 = self.baseline_tracker.derva_observed_type_macro_f1();
                 let exact_event_f1 = self.baseline_tracker.exact_event_f1();
                 let learning_slope = self.baseline_tracker.learning_slope();
+                let (ci_lower, ci_upper) = self.baseline_tracker.learning_slope_bootstrap_ci_95();
+                let (early, late, delta_learning) = self.baseline_tracker.f1_early_vs_late();
+                let n_hypotheses = self.active_hypotheses.len();
+                let n_schemas = self.count_generalized_schemas();
 
                 telemetry_logs.push(format!(
-                    "[RECEIPT RESOLVED] ID: {} | Outcome: {:?} | RER: {:.1}% | TypeMacroF1: DERVA={:.4} vs Best ({})={:.4} (Delta={:+.4}) | ExactEventF1: {:.4} | LearningSlope: {:+.4}",
+                    "[RECEIPT RESOLVED] ID: {} | Outcome: {:?} | RER: {:.1}% | TypeMacroF1: DERVA={:.4} vs Best ({})={:.4} (Delta={:+.4}) | ObservedMacroF1: {:.4} | MicroF1: {:.4} | ExactEventF1: {:.4} | D2(Hyps={}, Schemas={}) | LearningSlope: {:+.4} [95% CI: [{:+.4}, {:+.4}]] | EarlyVsLate: Early={:.4}, Late={:.4} (Delta={:+.4})",
                     receipt.receipt_id,
                     outcome,
                     self.baseline_tracker.resolution_evaluability_rate() * 100.0,
-                    derva_f1,
+                    derva_macro_f1,
                     best_b_name,
                     best_b_score,
-                    derva_f1 - best_b_score,
+                    derva_macro_f1 - best_b_score,
+                    derva_obs_macro_f1,
+                    derva_micro_f1,
                     exact_event_f1,
-                    learning_slope
+                    n_hypotheses,
+                    n_schemas,
+                    learning_slope,
+                    ci_lower,
+                    ci_upper,
+                    early,
+                    late,
+                    delta_learning
                 ));
+
 
                 if let Some(hyp) = self.active_hypotheses.iter_mut().find(|h| h.id == receipt.primary_hyp_id) {
                     hyp.prospective.issued += 1;
