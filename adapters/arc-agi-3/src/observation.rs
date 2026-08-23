@@ -1,5 +1,5 @@
 // AUDIT-LENSES: Ada Lovelace, Alan Turing, Donald Knuth
-// INVARIANT: Generic Domain-Agnostic Perception model for ARC-AGI-3 frames. Converts visual grids into canonical ORIDs & spatial distinction properties without game-specific heuristics.
+// INVARIANT: Generic Domain-Agnostic Perception model for ARC-AGI-3 frames. Converts visual grids into canonical ORIDs & spatial distinction properties with Multi-Attribute Visual Continuity Object Matching across frame transitions.
 
 use serde::{Deserialize, Serialize};
 
@@ -40,36 +40,58 @@ pub struct CanonicalObservation {
 }
 
 impl CanonicalObservation {
+    /// Computes multi-attribute visual continuity matching between previous and current observations.
+    /// Preserves persistent object identities across spatial moves and color transitions.
     pub fn compute_events(&self, prev: &CanonicalObservation) -> Vec<GridEvent> {
         let mut events = Vec::new();
+        let mut matched_pairs: Vec<(u32, u32)> = Vec::new(); // (prev_id, curr_id)
+        let mut used_curr_indices = std::collections::HashSet::new();
 
-        // 1. Appears / Disappears
-        let current_ids: std::collections::HashSet<u32> = self.objects.iter().map(|o| o.id).collect();
-        let prev_ids: std::collections::HashSet<u32> = prev.objects.iter().map(|o| o.id).collect();
+        // 1. Multi-Attribute Similarity Matching (Color, Pixel Area, Spatial Proximity)
+        for prev_obj in &prev.objects {
+            let mut best_match: Option<(usize, f64)> = None;
 
-        for &id in current_ids.difference(&prev_ids) {
-            if let Some(obj) = self.objects.iter().find(|o| o.id == id) {
-                events.push(GridEvent::ObjectAppeared {
-                    id: obj.id,
-                    color: obj.color,
-                    centroid: obj.centroid,
-                });
+            for (c_idx, curr_obj) in self.objects.iter().enumerate() {
+                if used_curr_indices.contains(&c_idx) {
+                    continue;
+                }
+
+                // Feature similarities
+                let color_sim = if prev_obj.color == curr_obj.color { 1.0 } else { 0.3 };
+
+                let max_pixels = prev_obj.pixel_count.max(curr_obj.pixel_count).max(1) as f64;
+                let pixel_diff = (prev_obj.pixel_count as i64 - curr_obj.pixel_count as i64).abs() as f64;
+                let area_sim = (1.0 - (pixel_diff / max_pixels)).max(0.0);
+
+                let dx = (prev_obj.centroid[0] as f64 - curr_obj.centroid[0] as f64).abs();
+                let dy = (prev_obj.centroid[1] as f64 - curr_obj.centroid[1] as f64).abs();
+                let dist = (dx * dx + dy * dy).sqrt();
+                let pos_sim = (1.0 - (dist / 30.0)).max(0.0);
+
+                let total_score = 0.35 * color_sim + 0.35 * area_sim + 0.30 * pos_sim;
+
+                if total_score >= 0.55 {
+                    if let Some((_, best_score)) = best_match {
+                        if total_score > best_score {
+                            best_match = Some((c_idx, total_score));
+                        }
+                    } else {
+                        best_match = Some((c_idx, total_score));
+                    }
+                }
             }
-        }
 
-        for &id in prev_ids.difference(&current_ids) {
-            events.push(GridEvent::ObjectDisappeared { id });
-        }
+            if let Some((c_idx, _)) = best_match {
+                used_curr_indices.insert(c_idx);
+                matched_pairs.push((prev_obj.id, self.objects[c_idx].id));
 
-        // 2. Moves & Color Changes
-        for curr_obj in &self.objects {
-            if let Some(prev_obj) = prev.objects.iter().find(|o| o.id == curr_obj.id) {
+                let curr_obj = &self.objects[c_idx];
                 let dx = curr_obj.centroid[0] as i16 - prev_obj.centroid[0] as i16;
                 let dy = curr_obj.centroid[1] as i16 - prev_obj.centroid[1] as i16;
 
                 if dx != 0 || dy != 0 {
                     events.push(GridEvent::ObjectMoved {
-                        id: curr_obj.id,
+                        id: prev_obj.id, // Retain persistent temporal ID!
                         dx: dx.clamp(-128, 127) as i8,
                         dy: dy.clamp(-128, 127) as i8,
                     });
@@ -77,11 +99,25 @@ impl CanonicalObservation {
 
                 if curr_obj.color != prev_obj.color {
                     events.push(GridEvent::ColorChanged {
-                        id: curr_obj.id,
+                        id: prev_obj.id, // Retain persistent temporal ID!
                         old_color: prev_obj.color,
                         new_color: curr_obj.color,
                     });
                 }
+            } else {
+                // Object disappeared if no visual match found above threshold
+                events.push(GridEvent::ObjectDisappeared { id: prev_obj.id });
+            }
+        }
+
+        // 2. Unmatched Current Objects -> ObjectAppeared
+        for (c_idx, curr_obj) in self.objects.iter().enumerate() {
+            if !used_curr_indices.contains(&c_idx) {
+                events.push(GridEvent::ObjectAppeared {
+                    id: curr_obj.id,
+                    color: curr_obj.color,
+                    centroid: curr_obj.centroid,
+                });
             }
         }
 

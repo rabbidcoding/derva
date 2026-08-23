@@ -1,5 +1,5 @@
 // AUDIT-LENSES: Steve Jobs, Niklaus Wirth, Donald Knuth, Alan Turing
-// INVARIANT: Authoritative Rust bridge for ARC-AGI-3. Implements Gate G10.2 Predictive World Model Hardened Audit Protocol: Precondition Applicability Check (Applicable_i AND Applicable_j AND Predict_i != Predict_j), Multi-Label Event Metrics, Informative Rate Tracking (N_informative / N_issued >= 70%), Synchronous Parallel Baseline Suite (B0..B4), 20-Receipt Windowed Learning Curve, and False Prune Rate metrics.
+// INVARIANT: Authoritative Rust bridge for ARC-AGI-3. Implements Sub-Gate G10.2-C0 Receipt Validity & Object Identity Audit: Typed UninformativeReason, Single Authoritative Precondition Evaluator, Hierarchical PartialMatch Resolution, IssueValidityRate (IVR), ResolutionEvaluabilityRate (RER), and Multi-Label Baseline Metrics.
 
 use std::collections::{HashMap, VecDeque};
 use crate::action::{ArcAction, ArcActionSpace, SelectedAction};
@@ -53,7 +53,20 @@ pub enum PredictionOutcome {
     ExactMatch,
     PartialMatch,
     Contradiction,
-    Uninformative,
+    Uninformative(UninformativeReason),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum UninformativeReason {
+
+    PreconditionsInvalidAtIssue,
+    TargetIdentityLost,
+    TargetNotObservable,
+    ActionNotAppliedAsRequested,
+    StateChangedBeforeEffect,
+    AmbiguousEventMatching,
+    EffectOutsideObservationModel,
+    NoneInformative,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,6 +99,7 @@ pub struct PredictionReceipt {
     pub target_coords: Option<[u8; 2]>,
     pub expected_event: GridEvent,
     pub state_root: String,
+    pub precondition_witness: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,8 +144,9 @@ pub struct BaselineTracker {
     pub b2_last_effect_confusions: HashMap<EventCategory, CategoryConfusion>,
     pub last_effect: EventCategory,
     pub issued_receipts: u64,
+    pub valid_at_issue_receipts: u64,
     pub informative_receipts: u64,
-    pub window_f1_scores: Vec<f64>,
+    pub uninformative_breakdown: HashMap<UninformativeReason, u64>,
 }
 
 impl BaselineTracker {
@@ -142,17 +157,27 @@ impl BaselineTracker {
             b2_last_effect_confusions: HashMap::new(),
             last_effect: EventCategory::NoChange,
             issued_receipts: 0,
+            valid_at_issue_receipts: 0,
             informative_receipts: 0,
-            window_f1_scores: Vec::new(),
+            uninformative_breakdown: HashMap::new(),
         }
     }
 
-    pub fn record_prediction(&mut self, predicted_cat: EventCategory, actual_cat: EventCategory, is_informative: bool) {
+    pub fn record_prediction(&mut self, predicted_cat: EventCategory, actual_cat: EventCategory, outcome: PredictionOutcome, valid_at_issue: bool) {
         self.issued_receipts += 1;
-        if !is_informative {
-            return;
+        if valid_at_issue {
+            self.valid_at_issue_receipts += 1;
         }
-        self.informative_receipts += 1;
+
+        match outcome {
+            PredictionOutcome::Uninformative(reason) => {
+                *self.uninformative_breakdown.entry(reason).or_default() += 1;
+                return;
+            }
+            _ => {
+                self.informative_receipts += 1;
+            }
+        }
 
         // DERVA Predictor (B4)
         let derva_entry = self.derva_confusions.entry(actual_cat).or_default();
@@ -184,9 +209,21 @@ impl BaselineTracker {
             fp_entry.false_positives += 1;
         }
         self.last_effect = actual_cat;
+    }
 
-        if self.informative_receipts % 20 == 0 {
-            self.window_f1_scores.push(self.derva_type_macro_f1());
+    pub fn issue_validity_rate(&self) -> f64 {
+        if self.issued_receipts == 0 {
+            0.0
+        } else {
+            self.valid_at_issue_receipts as f64 / self.issued_receipts as f64
+        }
+    }
+
+    pub fn resolution_evaluability_rate(&self) -> f64 {
+        if self.valid_at_issue_receipts == 0 {
+            0.0
+        } else {
+            self.informative_receipts as f64 / self.valid_at_issue_receipts as f64
         }
     }
 
@@ -240,7 +277,6 @@ pub struct ArcBridgeEngine {
     pub pending_prediction: Option<PredictionReceipt>,
     pub supported_hypotheses: u64,
     pub refuted_hypotheses: u64,
-    pub false_prunes: u64,
     pub target_object_idx: usize,
     pub recent_state_roots: VecDeque<String>,
     pub stagnation_counter: u32,
@@ -260,7 +296,6 @@ impl ArcBridgeEngine {
             pending_prediction: None,
             supported_hypotheses: 0,
             refuted_hypotheses: 0,
-            false_prunes: 0,
             target_object_idx: 0,
             recent_state_roots: VecDeque::with_capacity(10),
             stagnation_counter: 0,
@@ -268,11 +303,25 @@ impl ArcBridgeEngine {
         }
     }
 
+    /// Single authoritative precondition evaluator for hypothesis selection and resolution
+    pub fn evaluate_preconditions(&self, hyp: &TransitionHypothesis, obs: &CanonicalObservation) -> (bool, Option<UninformativeReason>) {
+        match &hyp.predicted_event {
+            GridEvent::ObjectMoved { id, .. } | GridEvent::ColorChanged { id, .. } | GridEvent::ObjectDisappeared { id } => {
+                if obs.objects.iter().any(|o| o.id == *id) {
+                    (true, None)
+                } else {
+                    (false, Some(UninformativeReason::TargetIdentityLost))
+                }
+            }
+            GridEvent::ObjectAppeared { .. } | GridEvent::GridRestructured { .. } => (true, None),
+        }
+    }
+
     pub fn process_step(&mut self, req: StepRequest) -> StepResponse {
         self.step_counter += 1;
         let mut telemetry_logs = Vec::new();
 
-        // 1. EVENT INDUCTION & RECEIPT RESOLUTION
+        // 1. EVENT INDUCTION & MULTI-ATTRIBUTE OBJECT MATCHING
         let events = if let Some(prev_obs) = &self.last_observation {
             req.observation.compute_events(prev_obs)
         } else {
@@ -308,7 +357,7 @@ impl ArcBridgeEngine {
             };
             self.history_trace.push(transition);
 
-            // Resolve Pending Prediction Receipt
+            // Resolve Pending Prediction Receipt with Hierarchical Matching
             if let Some(receipt) = self.pending_prediction.take() {
                 let predicted_cat = match &receipt.expected_event {
                     GridEvent::ObjectMoved { .. } => EventCategory::Moved,
@@ -318,23 +367,42 @@ impl ArcBridgeEngine {
                     GridEvent::GridRestructured { .. } => EventCategory::NoChange,
                 };
 
-                let outcome = if events.iter().any(|e| e == &receipt.expected_event) {
+                let (valid_at_res, res_reason) = if let Some(hyp) = self.active_hypotheses.iter().find(|h| h.id == receipt.primary_hyp_id) {
+                    self.evaluate_preconditions(hyp, &req.observation)
+                } else {
+                    (true, None)
+                };
+
+                let outcome = if !valid_at_res {
+                    PredictionOutcome::Uninformative(res_reason.unwrap_or(UninformativeReason::TargetIdentityLost))
+                } else if events.iter().any(|e| e == &receipt.expected_event) {
                     PredictionOutcome::ExactMatch
+                } else if let GridEvent::ObjectMoved { id: p_id, dx: p_dx, dy: p_dy } = &receipt.expected_event {
+                    // Check Hierarchical PartialMatch: direction matches even if magnitude differs
+                    if events.iter().any(|e| match e {
+                        GridEvent::ObjectMoved { id, dx, dy } => id == p_id && ((*dx > 0 && *p_dx > 0) || (*dx < 0 && *p_dx < 0) || (*dy > 0 && *p_dy > 0) || (*dy < 0 && *p_dy < 0)),
+                        _ => false,
+                    }) {
+                        PredictionOutcome::PartialMatch
+                    } else if !events.is_empty() {
+                        PredictionOutcome::Contradiction
+                    } else {
+                        PredictionOutcome::Uninformative(UninformativeReason::NoneInformative)
+                    }
                 } else if !events.is_empty() {
                     PredictionOutcome::Contradiction
                 } else {
-                    PredictionOutcome::Uninformative
+                    PredictionOutcome::Uninformative(UninformativeReason::NoneInformative)
                 };
 
-                let is_informative = outcome != PredictionOutcome::Uninformative;
-                self.baseline_tracker.record_prediction(predicted_cat, actual_category, is_informative);
+                self.baseline_tracker.record_prediction(predicted_cat, actual_category, outcome, receipt.precondition_witness);
 
                 telemetry_logs.push(format!(
-                    "[RECEIPT RESOLVED] ID: {} | Outcome: {:?} | Issued: {} | Informative: {} | InfRate: {:.1}% | TypeMacroF1: DERVA={:.4} vs B1={:.4}",
+                    "[RECEIPT RESOLVED] ID: {} | Outcome: {:?} | IVR: {:.1}% | RER: {:.1}% | InfRate: {:.1}% | TypeMacroF1: DERVA={:.4} vs B1={:.4}",
                     receipt.receipt_id,
                     outcome,
-                    self.baseline_tracker.issued_receipts,
-                    self.baseline_tracker.informative_receipts,
+                    self.baseline_tracker.issue_validity_rate() * 100.0,
+                    self.baseline_tracker.resolution_evaluability_rate() * 100.0,
                     self.baseline_tracker.informative_rate() * 100.0,
                     self.baseline_tracker.derva_type_macro_f1(),
                     self.baseline_tracker.b1_type_macro_f1()
@@ -348,6 +416,10 @@ impl ArcBridgeEngine {
                             self.supported_hypotheses += 1;
                             telemetry_logs.push(format!("[EPISTEMIC PROMOTION] {} -> SUPPORTED", hyp.id));
                         }
+                        PredictionOutcome::PartialMatch => {
+                            hyp.support_count += 1;
+                            telemetry_logs.push(format!("[PARTIAL MATCH] Direction matched for {}; support count incremented", hyp.id));
+                        }
                         PredictionOutcome::Contradiction => {
                             hyp.refutation_count += 1;
                             if hyp.refutation_count >= 2 {
@@ -359,10 +431,17 @@ impl ArcBridgeEngine {
                                 telemetry_logs.push(format!("[FALSIFICATION] {} -> CONTESTED", hyp.id));
                             }
                         }
-                        PredictionOutcome::Uninformative => {
-                            telemetry_logs.push(format!("[UNINFORMATIVE] Preconditions not met for {}; status remains {:?}", hyp.id, hyp.status));
+                        PredictionOutcome::Uninformative(reason) => {
+                            telemetry_logs.push(format!("[UNINFORMATIVE] Reason: {:?} for {}; status remains {:?}", reason, hyp.id, hyp.status));
+                            hyp.retrodiction.ambiguous += 1;
+                            if hyp.retrodiction.ambiguous >= 3 {
+                                hyp.status = HypothesisStatus::Contested;
+                                telemetry_logs.push(format!("[DEPRIORITIZED AMBIGUOUS] {} -> CONTESTED due to repeated uninformative observations", hyp.id));
+                            }
+                            self.target_object_idx = self.target_object_idx.wrapping_add(1);
                         }
-                        PredictionOutcome::PartialMatch => {}
+
+
                     }
                 }
             }
@@ -371,6 +450,11 @@ impl ArcBridgeEngine {
             for ev in &events {
                 let hyp_id = format!("H_trans_act{}_ev{:?}", prev_act.action_id, ev);
                 if !self.active_hypotheses.iter().any(|h| h.id == hyp_id) {
+                    let target_obj_id = match ev {
+                        GridEvent::ObjectMoved { id, .. } | GridEvent::ColorChanged { id, .. } | GridEvent::ObjectDisappeared { id } => Some(*id),
+                        _ => None,
+                    };
+
                     let mut retro = RetrodictionVector {
                         applicable: 0,
                         correct: 0,
@@ -394,7 +478,7 @@ impl ArcBridgeEngine {
                     let hyp = TransitionHypothesis {
                         id: hyp_id.clone(),
                         action_id: prev_act.action_id,
-                        target_object_id: None,
+                        target_object_id: target_obj_id,
                         predicted_event: ev.clone(),
                         status: HypothesisStatus::Unverified,
                         support_count: 1,
@@ -432,7 +516,7 @@ impl ArcBridgeEngine {
         }
         self.recent_state_roots.push_back(current_root_str);
 
-        // 3. ACTION SELECTION: PRECONDITION-APPLICABLE DISCRIMINATION (G10.2-D)
+        // 3. ACTION SELECTION WITH AUTHORITATIVE PRECONDITION EVALUATOR
         let candidate_actions = &req.action_space.actions;
         let num_candidates = candidate_actions.len();
 
@@ -441,21 +525,25 @@ impl ArcBridgeEngine {
             _ => None,
         });
 
-        // Filter active hypotheses that satisfy preconditions
-        let active_hyps: Vec<&TransitionHypothesis> = self
+        // Filter hypotheses using single authoritative precondition evaluator
+        let active_hyps: Vec<(&TransitionHypothesis, bool)> = self
             .active_hypotheses
             .iter()
             .filter(|h| h.status == HypothesisStatus::Supported || h.status == HypothesisStatus::Unverified)
+            .map(|h| {
+                let (valid, _) = self.evaluate_preconditions(h, &req.observation);
+                (h, valid)
+            })
             .collect();
 
-        // Check Applicability(H1) AND Applicability(H2) AND Predict(H1) != Predict(H2)
+        // Strict Pairwise Discrimination between valid hypotheses
         let discriminating_pair = if active_hyps.len() >= 2 {
             let mut found = None;
             'outer: for i in 0..active_hyps.len() {
                 for j in (i + 1)..active_hyps.len() {
-                    let h1 = active_hyps[i];
-                    let h2 = active_hyps[j];
-                    if h1.predicted_event != h2.predicted_event {
+                    let (h1, valid1) = active_hyps[i];
+                    let (h2, valid2) = active_hyps[j];
+                    if valid1 && valid2 && h1.predicted_event != h2.predicted_event {
                         found = Some((h1.clone(), h2.clone()));
                         break 'outer;
                     }
@@ -492,10 +580,11 @@ impl ArcBridgeEngine {
                 },
                 expected_event: h1.predicted_event.clone(),
                 state_root: self.current_commit_root.to_string(),
+                precondition_witness: true,
             });
 
             telemetry_logs.push(format!(
-                "[APPLICABLE DISCRIMINATION] Receipt: {} | H1: {} vs H2: {} | ExpectedEvent: {:?}",
+                "[VALID DISCRIMINATION] Receipt: {} | H1: {} vs H2: {} | ExpectedEvent: {:?}",
                 receipt_id, h1.id, h2.id, h1.predicted_event
             ));
 
@@ -505,7 +594,7 @@ impl ArcBridgeEngine {
                 y: target_y,
                 hypothesis_id: format!("Discriminate_{}_vs_{}|Receipt:{}", h1.id, h2.id, receipt_id),
             }
-        } else if let Some(hyp) = active_hyps.first() {
+        } else if let Some((hyp, valid)) = active_hyps.first() {
             let (target_x, target_y) = if let Some(_sp_id) = spatial_action_id {
                 let num_objects = req.observation.objects.len();
                 if num_objects > 0 {
@@ -531,6 +620,7 @@ impl ArcBridgeEngine {
                 },
                 expected_event: hyp.predicted_event.clone(),
                 state_root: self.current_commit_root.to_string(),
+                precondition_witness: *valid,
             });
 
             SelectedAction {
