@@ -4,6 +4,7 @@ members = [
     "crates/origin-core",
     "crates/origin-kernel",
     "crates/origin-store",
+    "crates/origin-evidence",
     "crates/origin-verify",
     "crates/origin-logic",
     "crates/origin-constraints",
