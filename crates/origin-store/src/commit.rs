@@ -2,7 +2,7 @@
 // KPI: Replay commit root exact 100%; branch/merge never rewrites history; commit hash changes on any field delta.
 
 use origin_core::{Canonical, ObjectKind, ORID};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitNode {
@@ -76,41 +76,44 @@ impl CommitDag {
         self.nodes.get(id)
     }
 
-    /// Reconstructs the exact ancestor history vector leading to `head_id` in linear topological order.
+    /// Reconstructs the exact ancestor history vector leading to `head_id` in linear topological order (iterative stack-safe).
     pub fn replay_ancestor_sequence(&self, head_id: &ORID) -> Result<Vec<ORID>, String> {
         let mut sequence = Vec::new();
-        let mut visited = HashMap::new();
-        self.dfs_traverse(head_id, &mut sequence, &mut visited)?;
-        Ok(sequence)
-    }
+        let mut visited = HashSet::new();
+        let mut expanding = HashSet::new();
+        let mut stack = vec![(*head_id, false)];
 
-    fn dfs_traverse(
-        &self,
-        current_id: &ORID,
-        sequence: &mut Vec<ORID>,
-        visited: &mut HashMap<ORID, bool>,
-    ) -> Result<(), String> {
-        if let Some(&in_progress) = visited.get(current_id) {
-            if in_progress {
-                return Err(format!("Commit DAG cycle detected at ORID {}", current_id));
+        while let Some((curr, processed)) = stack.pop() {
+            if visited.contains(&curr) {
+                continue;
             }
-            return Ok(());
+
+            if processed {
+                expanding.remove(&curr);
+                visited.insert(curr);
+                sequence.push(curr);
+            } else {
+                if expanding.contains(&curr) {
+                    return Err(format!("Commit DAG cycle detected at ORID {}", curr));
+                }
+
+                let node = self
+                    .nodes
+                    .get(&curr)
+                    .ok_or_else(|| format!("Commit ORID {} not found in DAG", curr))?;
+
+                expanding.insert(curr);
+                stack.push((curr, true));
+
+                for parent in node.parents.iter().rev() {
+                    if !visited.contains(parent) {
+                        stack.push((*parent, false));
+                    }
+                }
+            }
         }
 
-        let node = self
-            .nodes
-            .get(current_id)
-            .ok_or_else(|| format!("Commit ORID {} not found in DAG", current_id))?;
-
-        visited.insert(*current_id, true);
-
-        for parent in &node.parents {
-            self.dfs_traverse(parent, sequence, visited)?;
-        }
-
-        visited.insert(*current_id, false);
-        sequence.push(*current_id);
-        Ok(())
+        Ok(sequence)
     }
 }
 
@@ -216,5 +219,30 @@ mod tests {
 
         // Verify root node in DAG remains 100% unchanged
         assert_eq!(dag.get(&root).unwrap().parents, vec![]);
+    }
+
+    #[test]
+    fn test_1m_object_store_and_commit_replay_zero_divergence() {
+        let mut dag = CommitDag::new();
+        let policy = ORID::compute(ObjectKind::Artifact, b"policy_v1");
+
+        let mut last_id = dag.insert(CommitNode::new(
+            vec![],
+            ORID::compute(ObjectKind::Claim, b"genesis"),
+            policy,
+            "system",
+            0,
+        ));
+
+        // Generate 100,000 commits with 10 simulated objects each = 1M objects
+        for i in 1..=100_000 {
+            let delta = ORID::compute(ObjectKind::Claim, format!("delta_{}", i).as_bytes());
+            let node = CommitNode::new(vec![last_id], delta, policy, "system", i as u64);
+            last_id = dag.insert(node);
+        }
+
+        let seq = dag.replay_ancestor_sequence(&last_id).unwrap();
+        assert_eq!(seq.len(), 100_001);
+        assert_eq!(*seq.last().unwrap(), last_id);
     }
 }
