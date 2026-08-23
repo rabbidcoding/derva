@@ -1,10 +1,14 @@
 #![forbid(unsafe_code)]
 
 // ORIGIN-Ω ZERO Subsystem: origin-verify
-// Proof and obligation verification engine with runtime freshness tracking and witness resolution.
+// Proof, obligation verification engine, and contradiction preservation.
 
+pub mod contradiction;
 pub mod obligations;
 
+pub use contradiction::{
+    ConflictingSet, ContradictionEngine, ContradictionError, ContradictionPair,
+};
 pub use obligations::{ObligationError, ObligationResolution, ObligationRuntime, ObligationState};
 pub use origin_core::{Status, TypedObligation};
 
