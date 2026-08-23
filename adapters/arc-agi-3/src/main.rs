@@ -2,7 +2,7 @@
 // INVARIANT: Authoritative Rust binary listening for JSONL request stream from Python agent.
 
 use derva_arc3_adapter::bridge::{ArcBridgeEngine, StepRequest};
-use std::io::{self, BufRead};
+use std::io::{self, BufRead, Write};
 
 fn main() {
     let mut engine = ArcBridgeEngine::new();
@@ -12,12 +12,21 @@ fn main() {
             if text.trim().is_empty() {
                 continue;
             }
-            if let Ok(req) = serde_json::from_str::<StepRequest>(&text) {
-                let resp = engine.process_step(req);
-                if let Ok(json_out) = serde_json::to_string(&resp) {
-                    println!("{}", json_out);
+            match serde_json::from_str::<StepRequest>(&text) {
+                Ok(req) => {
+                    let resp = engine.process_step(req);
+                    if let Ok(json_out) = serde_json::to_string(&resp) {
+                        println!("{}", json_out);
+                        let _ = io::stdout().flush();
+                    }
+                }
+                Err(err) => {
+                    eprintln!("[DERVA Rust IPC Error] Failed to parse StepRequest: {} | JSON: {}", err, text);
+                    let _ = io::stderr().flush();
                 }
             }
         }
     }
+
 }
+

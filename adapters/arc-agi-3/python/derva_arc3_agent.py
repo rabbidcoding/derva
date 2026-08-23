@@ -40,7 +40,8 @@ class DervaArc3Agent:
             raise RuntimeError("DERVA Rust adapter process terminated unexpectedly!")
         
         resp = json.loads(response_line)
-        return resp["action"]
+        return resp
+
 
     def close(self):
         if self.proc:
