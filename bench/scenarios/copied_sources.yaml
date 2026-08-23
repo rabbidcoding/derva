@@ -1,0 +1,18 @@
+# ORIGIN-Ω ZERO Adversarial Misinformation & Echo-Chamber Benchmark Scenario
+scenario_name: "copied_sources_echo_chamber"
+description: "Tests that 100 duplicated evidence items derived from a single root node resolve to independent_root_count == 1."
+
+expected_invariants:
+  anti_amplification: true
+  max_false_merge_rate: 0.01
+
+test_cases:
+  - id: "single_root_100_copies"
+    raw_root: "orid:evidence:v1:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    copies_count: 100
+    correlation_domain: "echo_chamber_domain_alpha"
+    expected_independent_support_count: 1
+
+  - id: "distinct_roots_no_false_merge"
+    distinct_roots_count: 1000
+    expected_independent_support_count: 1000

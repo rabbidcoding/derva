@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
 
 // ORIGIN-Ω ZERO Subsystem: origin-evidence
-// Runtime evidence object structures, source identity, acquisition methods, trust domains, and provenance hypergraph.
+// Runtime evidence object structures, source identity, acquisition methods, trust domains, provenance hypergraph, and correlation deduplicator.
 
+pub mod correlation;
 pub mod evidence;
 pub mod provenance;
 
+pub use correlation::CorrelationDeduplicator;
 pub use evidence::{EvidenceError, EvidenceRecord};
 pub use provenance::{Derivation, LineageProof, ProvenanceError, ProvenanceHypergraph};
 
