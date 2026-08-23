@@ -1,0 +1,21 @@
+# ORIGIN-Ω ZERO — Crash Matrix Configuration for Task T091
+# AUDIT-LENSES: Ken Thompson, Dennis Ritchie, Elon Musk
+
+[campaign]
+name = "release_crash_recovery_campaign"
+target_crash_points = 1000000
+seed = 42
+
+[injection_targets]
+wal_header_append = true
+wal_payload_append = true
+wal_fsync = true
+object_store_write = true
+commit_dag_publication = true
+root_pointer_update = true
+
+[failure_modes]
+kill_immediate = 0.40
+write_truncation = 0.30
+byte_corruption = 0.20
+fsync_loss = 0.10
