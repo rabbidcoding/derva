@@ -3,6 +3,9 @@
 // ORIGIN-Ω ZERO Subsystem: origin-store
 // Content-addressed immutable persistence layer.
 
+pub mod object_store;
+
+pub use object_store::{ObjectStore, StoreError};
 pub use origin_core::{Canonical, ORID};
 
 pub fn crate_name() -> &'static str {
