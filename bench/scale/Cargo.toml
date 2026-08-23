@@ -1,0 +1,11 @@
+[package]
+name = "bench-scale"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+origin-core = { path = "../../crates/origin-core" }
+origin-store = { path = "../../crates/origin-store" }
+origin-fast = { path = "../../crates/origin-fast" }
+origin-runtime = { path = "../../crates/origin-runtime" }

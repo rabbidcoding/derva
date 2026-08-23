@@ -29,6 +29,7 @@ members = [
     "bench/zero_train_reasoning",
     "bench/causal_worlds",
     "security/redteam",
+    "bench/scale",
 ]
 
 [workspace.package]
