@@ -1,10 +1,12 @@
 #![forbid(unsafe_code)]
 
 // ORIGIN-Ω ZERO — OIR Compiler Subsystem
-// INVARIANT: Safe region stability detection, zero unsafe code, strict obligation checking.
+// INVARIANT: Safe region stability detection, artifact dependency invalidation, zero unsafe code.
 
+pub mod artifact;
 pub mod stability;
 
+pub use artifact::{ArtifactError, CompiledArtifact, DomainGuard};
 pub use stability::{EligibilityResult, RegionMetrics, StabilityConfig, StableRegionDetector};
 
 pub fn crate_name() -> &'static str {
