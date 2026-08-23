@@ -191,26 +191,46 @@ impl CategoryConfusion {
 
 pub struct BaselineTracker {
     pub derva_confusions: HashMap<EventCategory, CategoryConfusion>,
+    pub b0_random_confusions: HashMap<EventCategory, CategoryConfusion>,
     pub b1_no_change_confusions: HashMap<EventCategory, CategoryConfusion>,
     pub b2_last_effect_confusions: HashMap<EventCategory, CategoryConfusion>,
+    pub b3_freq_majority_confusions: HashMap<EventCategory, CategoryConfusion>,
+    pub category_counts: HashMap<EventCategory, u64>,
     pub last_effect: EventCategory,
+    pub b0_seed: u64,
     pub issued_receipts: u64,
     pub valid_at_issue_receipts: u64,
     pub informative_receipts: u64,
     pub uninformative_breakdown: HashMap<UninformativeReason, u64>,
+
+    // Sub-Gate G10.2-D & F Metrics
+    pub exact_event_matches: u64,
+    pub exact_event_total: u64,
+    pub window_f1_scores: Vec<f64>,
+    pub current_bucket_hits: u64,
+    pub current_bucket_total: u64,
 }
 
 impl BaselineTracker {
     pub fn new() -> Self {
         Self {
             derva_confusions: HashMap::new(),
+            b0_random_confusions: HashMap::new(),
             b1_no_change_confusions: HashMap::new(),
             b2_last_effect_confusions: HashMap::new(),
+            b3_freq_majority_confusions: HashMap::new(),
+            category_counts: HashMap::new(),
             last_effect: EventCategory::NoChange,
+            b0_seed: 0xCAFEF00D,
             issued_receipts: 0,
             valid_at_issue_receipts: 0,
             informative_receipts: 0,
             uninformative_breakdown: HashMap::new(),
+            exact_event_matches: 0,
+            exact_event_total: 0,
+            window_f1_scores: Vec::new(),
+            current_bucket_hits: 0,
+            current_bucket_total: 0,
         }
     }
 
@@ -230,14 +250,67 @@ impl BaselineTracker {
             }
         }
 
+        let categories = [
+            EventCategory::NoChange,
+            EventCategory::Moved,
+            EventCategory::ColorChanged,
+            EventCategory::Appeared,
+            EventCategory::Disappeared,
+        ];
+
+        // B0 Predictor (Random Category)
+        self.b0_seed = self.b0_seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let b0_pred = categories[(self.b0_seed >> 32) as usize % 5];
+        let b0_entry = self.b0_random_confusions.entry(actual_cat).or_default();
+        if b0_pred == actual_cat {
+            b0_entry.true_positives += 1;
+        } else {
+            b0_entry.false_negatives += 1;
+            let fp_entry = self.b0_random_confusions.entry(b0_pred).or_default();
+            fp_entry.false_positives += 1;
+        }
+
+        // B3 Predictor (Frequency Majority / Mode)
+        let b3_pred = self
+            .category_counts
+            .iter()
+            .max_by_key(|(_, count)| *count)
+            .map(|(cat, _)| *cat)
+            .unwrap_or(EventCategory::NoChange);
+        let b3_entry = self.b3_freq_majority_confusions.entry(actual_cat).or_default();
+        if b3_pred == actual_cat {
+            b3_entry.true_positives += 1;
+        } else {
+            b3_entry.false_negatives += 1;
+            let fp_entry = self.b3_freq_majority_confusions.entry(b3_pred).or_default();
+            fp_entry.false_positives += 1;
+        }
+        *self.category_counts.entry(actual_cat).or_default() += 1;
+
         // DERVA Predictor (B4)
         let derva_entry = self.derva_confusions.entry(actual_cat).or_default();
         if predicted_cat == actual_cat {
             derva_entry.true_positives += 1;
+            self.current_bucket_hits += 1;
         } else {
             derva_entry.false_negatives += 1;
             let fp_entry = self.derva_confusions.entry(predicted_cat).or_default();
             fp_entry.false_positives += 1;
+        }
+        self.current_bucket_total += 1;
+
+        // Exact Event tracking for ExactEventF1
+        self.exact_event_total += 1;
+        if outcome == PredictionOutcome::ExactMatch {
+            self.exact_event_matches += 1;
+        }
+
+        // Online Learning Curve Bucket tracking (Every 5 receipts)
+        if self.current_bucket_total >= 5 {
+            let bucket_acc = self.current_bucket_hits as f64 / self.current_bucket_total as f64;
+            self.window_f1_scores.push(bucket_acc);
+            self.current_bucket_hits = 0;
+            self.current_bucket_total = 0;
         }
 
         // Baseline B1 (No-Change)
@@ -286,7 +359,7 @@ impl BaselineTracker {
         }
     }
 
-    pub fn derva_type_macro_f1(&self) -> f64 {
+    pub fn b0_type_macro_f1(&self) -> f64 {
         let categories = [
             EventCategory::NoChange,
             EventCategory::Moved,
@@ -296,7 +369,7 @@ impl BaselineTracker {
         ];
         let sum_f1: f64 = categories
             .iter()
-            .map(|c| self.derva_confusions.get(c).map_or(0.0, |conf| conf.f1_score()))
+            .map(|c| self.b0_random_confusions.get(c).map_or(0.0, |conf| conf.f1_score()))
             .sum();
         sum_f1 / categories.len() as f64
     }
@@ -315,7 +388,103 @@ impl BaselineTracker {
             .sum();
         sum_f1 / categories.len() as f64
     }
+
+    pub fn b2_type_macro_f1(&self) -> f64 {
+        let categories = [
+            EventCategory::NoChange,
+            EventCategory::Moved,
+            EventCategory::ColorChanged,
+            EventCategory::Appeared,
+            EventCategory::Disappeared,
+        ];
+        let sum_f1: f64 = categories
+            .iter()
+            .map(|c| self.b2_last_effect_confusions.get(c).map_or(0.0, |conf| conf.f1_score()))
+            .sum();
+        sum_f1 / categories.len() as f64
+    }
+
+    pub fn b3_type_macro_f1(&self) -> f64 {
+        let categories = [
+            EventCategory::NoChange,
+            EventCategory::Moved,
+            EventCategory::ColorChanged,
+            EventCategory::Appeared,
+            EventCategory::Disappeared,
+        ];
+        let sum_f1: f64 = categories
+            .iter()
+            .map(|c| self.b3_freq_majority_confusions.get(c).map_or(0.0, |conf| conf.f1_score()))
+            .sum();
+        sum_f1 / categories.len() as f64
+    }
+
+    pub fn derva_type_macro_f1(&self) -> f64 {
+        let categories = [
+            EventCategory::NoChange,
+            EventCategory::Moved,
+            EventCategory::ColorChanged,
+            EventCategory::Appeared,
+            EventCategory::Disappeared,
+        ];
+        let sum_f1: f64 = categories
+            .iter()
+            .map(|c| self.derva_confusions.get(c).map_or(0.0, |conf| conf.f1_score()))
+            .sum();
+        sum_f1 / categories.len() as f64
+    }
+
+    pub fn best_baseline_macro_f1(&self) -> (String, f64) {
+        let b0 = self.b0_type_macro_f1();
+        let b1 = self.b1_type_macro_f1();
+        let b2 = self.b2_type_macro_f1();
+        let b3 = self.b3_type_macro_f1();
+
+        let mut best_name = "B0_Random";
+        let mut best_score = b0;
+
+        if b1 > best_score { best_name = "B1_NoChange"; best_score = b1; }
+        if b2 > best_score { best_name = "B2_LastEffect"; best_score = b2; }
+        if b3 > best_score { best_name = "B3_FrequencyMajority"; best_score = b3; }
+
+        (best_name.to_string(), best_score)
+    }
+
+    pub fn exact_event_f1(&self) -> f64 {
+        if self.exact_event_total == 0 {
+            0.0
+        } else {
+            self.exact_event_matches as f64 / self.exact_event_total as f64
+        }
+    }
+
+    pub fn learning_slope(&self) -> f64 {
+        let n = self.window_f1_scores.len();
+        if n < 2 {
+            return 0.0;
+        }
+        let mut sum_x = 0.0;
+        let mut sum_y = 0.0;
+        let mut sum_xy = 0.0;
+        let mut sum_xx = 0.0;
+
+        for (i, &y) in self.window_f1_scores.iter().enumerate() {
+            let x = i as f64;
+            sum_x += x;
+            sum_y += y;
+            sum_xy += x * y;
+            sum_xx += x * x;
+        }
+
+        let denom = (n as f64 * sum_xx) - (sum_x * sum_x);
+        if denom == 0.0 {
+            0.0
+        } else {
+            ((n as f64 * sum_xy) - (sum_x * sum_y)) / denom
+        }
+    }
 }
+
 
 pub struct ArcBridgeEngine {
     pub current_commit_root: ORID,
@@ -332,6 +501,7 @@ pub struct ArcBridgeEngine {
     pub recent_state_roots: VecDeque<String>,
     pub stagnation_counter: u32,
     pub baseline_tracker: BaselineTracker,
+    pub is_frozen: bool,
 }
 
 impl ArcBridgeEngine {
@@ -351,8 +521,10 @@ impl ArcBridgeEngine {
             recent_state_roots: VecDeque::with_capacity(10),
             stagnation_counter: 0,
             baseline_tracker: BaselineTracker::new(),
+            is_frozen: false,
         }
     }
+
 
     /// Single Authoritative Spatial Feasibility Evaluator for Sub-Gate G10.2-C1.1
     /// Checks full bounding box footprint translation against grid boundaries:
@@ -554,15 +726,22 @@ impl ArcBridgeEngine {
 
                 self.baseline_tracker.record_prediction(expected_category, actual_category, outcome, receipt.precondition_witness);
 
+                let (best_b_name, best_b_score) = self.baseline_tracker.best_baseline_macro_f1();
+                let derva_f1 = self.baseline_tracker.derva_type_macro_f1();
+                let exact_event_f1 = self.baseline_tracker.exact_event_f1();
+                let learning_slope = self.baseline_tracker.learning_slope();
+
                 telemetry_logs.push(format!(
-                    "[RECEIPT RESOLVED] ID: {} | Outcome: {:?} | IVR: {:.1}% | RER: {:.1}% | InfRate: {:.1}% | TypeMacroF1: DERVA={:.4} vs B1={:.4}",
+                    "[RECEIPT RESOLVED] ID: {} | Outcome: {:?} | RER: {:.1}% | TypeMacroF1: DERVA={:.4} vs Best ({})={:.4} (Delta={:+.4}) | ExactEventF1: {:.4} | LearningSlope: {:+.4}",
                     receipt.receipt_id,
                     outcome,
-                    self.baseline_tracker.issue_validity_rate() * 100.0,
                     self.baseline_tracker.resolution_evaluability_rate() * 100.0,
-                    self.baseline_tracker.informative_rate() * 100.0,
-                    self.baseline_tracker.derva_type_macro_f1(),
-                    self.baseline_tracker.b1_type_macro_f1()
+                    derva_f1,
+                    best_b_name,
+                    best_b_score,
+                    derva_f1 - best_b_score,
+                    exact_event_f1,
+                    learning_slope
                 ));
 
                 if let Some(hyp) = self.active_hypotheses.iter_mut().find(|h| h.id == receipt.primary_hyp_id) {
@@ -641,7 +820,7 @@ impl ArcBridgeEngine {
                             let hyp_prosp = hyp.prospective.clone();
 
                             if let UninformativeReason::EffectBlocked(BlockingCause::Boundary) = reason {
-                                if !hyp_req_feas {
+                                if !hyp_req_feas && !self.is_frozen {
                                     let refined_id = format!("Refine_{}_IF_feasible", hyp_id);
                                     let exists = self.active_hypotheses.iter().any(|h| h.id == refined_id);
                                     if !exists {
@@ -669,53 +848,56 @@ impl ArcBridgeEngine {
                 }
             }
 
-            // Induce new Transition Hypotheses from observed events
-            for ev in &events {
-                let hyp_id = format!("H_trans_act{}_ev{:?}", prev_act.action_id, ev);
-                if !self.active_hypotheses.iter().any(|h| h.id == hyp_id) {
-                    let target_obj_id = match ev {
-                        GridEvent::ObjectMoved { id, .. } | GridEvent::ColorChanged { id, .. } | GridEvent::ObjectDisappeared { id } => Some(*id),
-                        _ => None,
-                    };
+            // Induce new Transition Hypotheses from observed events (disabled when model is frozen)
+            if !self.is_frozen {
+                for ev in &events {
+                    let hyp_id = format!("H_trans_act{}_ev{:?}", prev_act.action_id, ev);
+                    if !self.active_hypotheses.iter().any(|h| h.id == hyp_id) {
+                        let target_obj_id = match ev {
+                            GridEvent::ObjectMoved { id, .. } | GridEvent::ColorChanged { id, .. } | GridEvent::ObjectDisappeared { id } => Some(*id),
+                            _ => None,
+                        };
 
-                    let mut retro = RetrodictionVector {
-                        applicable: 0,
-                        correct: 0,
-                        contradicted: 0,
-                        ambiguous: 0,
-                    };
+                        let mut retro = RetrodictionVector {
+                            applicable: 0,
+                            correct: 0,
+                            contradicted: 0,
+                            ambiguous: 0,
+                        };
 
-                    for past_trans in &self.history_trace {
-                        if past_trans.action_id == prev_act.action_id {
-                            retro.applicable += 1;
-                            if past_trans.events_observed.iter().any(|e| e == ev) {
-                                retro.correct += 1;
-                            } else if !past_trans.events_observed.is_empty() {
-                                retro.contradicted += 1;
-                            } else {
-                                retro.ambiguous += 1;
+                        for past_trans in &self.history_trace {
+                            if past_trans.action_id == prev_act.action_id {
+                                retro.applicable += 1;
+                                if past_trans.events_observed.iter().any(|e| e == ev) {
+                                    retro.correct += 1;
+                                } else if !past_trans.events_observed.is_empty() {
+                                    retro.contradicted += 1;
+                                } else {
+                                    retro.ambiguous += 1;
+                                }
                             }
                         }
+
+                        let hyp = TransitionHypothesis {
+                            id: hyp_id.clone(),
+                            derived_from: None,
+                            action_id: prev_act.action_id,
+                            target_object_id: target_obj_id,
+                            predicted_event: ev.clone(),
+                            requires_feasibility: false,
+                            status: HypothesisStatus::Unverified,
+                            support_count: 1,
+                            refutation_count: 0,
+                            retrodiction: retro.clone(),
+                            prospective: ProspectiveVector { issued: 0, exact_matches: 0, partial_matches: 0, contradictions: 0 },
+                        };
+
+                        telemetry_logs.push(format!("[PROPOSE HYPOTHESIS] {} | Retrodict Vector: (correct={}, applicable={})", hyp_id, retro.correct, retro.applicable));
+                        self.active_hypotheses.push(hyp);
                     }
-
-                    let hyp = TransitionHypothesis {
-                        id: hyp_id.clone(),
-                        derived_from: None,
-                        action_id: prev_act.action_id,
-                        target_object_id: target_obj_id,
-                        predicted_event: ev.clone(),
-                        requires_feasibility: false,
-                        status: HypothesisStatus::Unverified,
-                        support_count: 1,
-                        refutation_count: 0,
-                        retrodiction: retro.clone(),
-                        prospective: ProspectiveVector { issued: 0, exact_matches: 0, partial_matches: 0, contradictions: 0 },
-                    };
-
-                    telemetry_logs.push(format!("[PROPOSE HYPOTHESIS] {} | Retrodict Vector: (correct={}, applicable={})", hyp_id, retro.correct, retro.applicable));
-                    self.active_hypotheses.push(hyp);
                 }
             }
+
 
             // Update Strategy Stagnation
             if events.is_empty() {
@@ -1042,5 +1224,87 @@ mod tests {
         }
         assert_eq!(mismatches, 0, "Exhaustive footprint feasibility property test failed with mismatches!");
     }
+
+    #[test]
+    fn test_footprint_feasibility_large_random_property() {
+        let mut mismatches = 0;
+        let mut lcg_state: u64 = 0xDEADBEEF;
+        let mut next_u32 = || {
+            lcg_state = lcg_state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (lcg_state >> 32) as u32
+        };
+
+        let engine = ArcBridgeEngine::new();
+
+        for _ in 0..1_000_000 {
+            let grid_w = ((next_u32() % 63) + 2) as u8; // 2..64
+            let grid_h = ((next_u32() % 63) + 2) as u8; // 2..64
+
+            let x1 = (next_u32() % grid_w as u32) as u8;
+            let x2 = (next_u32() % grid_w as u32) as u8;
+            let min_x = x1.min(x2);
+            let max_x = x1.max(x2);
+
+            let y1 = (next_u32() % grid_h as u32) as u8;
+            let y2 = (next_u32() % grid_h as u32) as u8;
+            let min_y = y1.min(y2);
+            let max_y = y1.max(y2);
+
+            let dx = ((next_u32() % 129) as i16 - 64) as i8; // -64..64
+            let dy = ((next_u32() % 129) as i16 - 64) as i8; // -64..64
+
+            let new_min_x = min_x as i16 + dx as i16;
+            let new_max_x = max_x as i16 + dx as i16;
+            let new_min_y = min_y as i16 + dy as i16;
+            let new_max_y = max_y as i16 + dy as i16;
+
+            let is_in_grid = new_min_x >= 0
+                && new_max_x < grid_w as i16
+                && new_min_y >= 0
+                && new_max_y < grid_h as i16;
+
+            let dummy_obj = GenericObject {
+                id: 1,
+                color: 1,
+                bbox: [min_x, min_y, max_x, max_y],
+                centroid: [(min_x + max_x) / 2, (min_y + max_y) / 2],
+                pixel_count: 1,
+            };
+            let hyp = TransitionHypothesis {
+                id: "test_rand".to_string(),
+                derived_from: None,
+                action_id: 3,
+                target_object_id: Some(1),
+                predicted_event: GridEvent::ObjectMoved { id: 1, dx, dy },
+                requires_feasibility: false,
+                status: HypothesisStatus::Supported,
+                support_count: 1,
+                refutation_count: 0,
+                retrodiction: RetrodictionVector::default(),
+                prospective: ProspectiveVector::default(),
+            };
+            let obs = CanonicalObservation {
+                step: 1,
+                frame_width: grid_w,
+                frame_height: grid_h,
+                objects: vec![dummy_obj],
+                diff: TemporalDiff {
+                    objects_appeared: vec![],
+                    objects_disappeared: vec![],
+                    objects_moved: vec![],
+                    color_changes: vec![],
+                    events: vec![],
+                },
+            };
+
+            let witness = engine.evaluate_transition_feasibility(&hyp, &obs);
+            if witness.bounds_feasible != is_in_grid {
+                mismatches += 1;
+            }
+        }
+
+        assert_eq!(mismatches, 0, "Large random footprint feasibility property test failed with mismatches!");
+    }
 }
+
 
