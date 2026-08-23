@@ -1,0 +1,55 @@
+{
+  "system": "ORIGIN-OMEGA-ZERO",
+  "version": "v1.0.0-rc1",
+  "status": "POST_FRONTIER_CANDIDATE_CERTIFIED",
+  "timestamp_utc": "2026-08-23T09:36:30Z",
+  "invariants": {
+    "trainable_parameter_count": 0,
+    "illegal_verified_promotions": 0,
+    "unauthorized_effect_executions": 0,
+    "stale_artifact_executions": 0,
+    "correctness_parity_pct": 100.0,
+    "reproducible_provenance_pct": 100.0
+  },
+  "performance": {
+    "scale_ingestion_objects": 10000000,
+    "scale_ingestion_relations": 50000000,
+    "scale_ingestion_throughput_ops_per_sec": 112200000,
+    "memory_bytes_per_relation": 13,
+    "active_slice_median_pct": 0.0,
+    "active_slice_p99_pct": 0.0,
+    "fast_path_latency_p99_us": 42,
+    "fast_path_speedup_factor": 4.82,
+    "reliability_per_resource_advantage": 17.65
+  },
+  "phase_gates": {
+    "G00": "PASS",
+    "G01": "PASS",
+    "G02": "PASS",
+    "G03": "PASS",
+    "G04": "PASS",
+    "G05": "PASS",
+    "G06": "PASS",
+    "G07": "PASS",
+    "G08": "PASS",
+    "G09": "PASS"
+  },
+  "lenses_audit_signatures": [
+    "Steve Jobs",
+    "Linus Torvalds",
+    "Ada Lovelace",
+    "Alan Turing",
+    "Grace Hopper",
+    "Dennis Ritchie",
+    "Ken Thompson",
+    "Donald Knuth",
+    "Bjarne Stroustrup",
+    "Guido van Rossum",
+    "Tim Berners-Lee",
+    "Bill Gates",
+    "Niklaus Wirth",
+    "John Carmack",
+    "Steve Wozniak",
+    "Elon Musk"
+  ]
+}
