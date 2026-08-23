@@ -3,9 +3,15 @@
 // ORIGIN-Ω ZERO Subsystem: origin-plan
 // Deterministic Causal Planning & State Search Engine.
 
+pub mod ao;
 pub mod astar;
+pub mod ida;
+pub mod select;
 
+pub use ao::{AndOrBranch, AndOrPlanDomain, AoStarPlanner, HyperNodeKind};
 pub use astar::{AStarPlanner, AdmissibleHeuristic, PlanDomain, PlanError, PlanNode, PlanResult};
+pub use ida::IdaStarPlanner;
+pub use select::{MemoryPressure, PlannerKind, PlannerSelector, ProblemSignature};
 
 pub fn crate_name() -> &'static str {
     "origin-plan"
