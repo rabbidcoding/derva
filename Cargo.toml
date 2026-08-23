@@ -22,6 +22,7 @@ members = [
     "crates/origin-bench",
     "crates/origin-chaos",
     "crates/origin-modelcheck",
+    "bench/zero_train_reasoning",
 ]
 
 [workspace.package]

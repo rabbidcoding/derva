@@ -1,0 +1,14 @@
+[package]
+name = "zero_train_reasoning"
+version = "0.1.0"
+edition = "2021"
+authors = ["ORIGIN-Ω Architecture Core Team"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+origin-core = { path = "../../crates/origin-core" }
+origin-logic = { path = "../../crates/origin-logic" }
+origin-constraints = { path = "../../crates/origin-constraints" }
+origin-search = { path = "../../crates/origin-search" }
+origin-egraph = { path = "../../crates/origin-egraph" }
+origin-reason = { path = "../../crates/origin-reason" }
