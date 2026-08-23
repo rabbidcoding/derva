@@ -3,9 +3,13 @@
 // ORIGIN-Ω ZERO Subsystem: origin-causal
 // Causal Operators, Counterfactuals & Structural Causal Models.
 
+pub mod journal;
 pub mod operator;
 pub mod promotion;
 
+pub use journal::{
+    EnvironmentReceipt, InterventionJournal, InterventionOutcome, InterventionRecord, JournalError,
+};
 pub use operator::{CausalOperator, Cost, EffectId, OperatorError, PredicateId, Risk, SchemaId};
 pub use promotion::{CausalPromotionValidator, PromotionRecord};
 
