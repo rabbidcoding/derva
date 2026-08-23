@@ -5,6 +5,13 @@
 
 use std::collections::HashMap;
 
+pub mod rewrite;
+
+pub use rewrite::{
+    AppliedRewrite, EqualitySaturator, Extractor, RewriteRule, SaturationBudget, SaturationReport,
+    SaturationStopReason,
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum EType {
     Bool,
@@ -48,6 +55,14 @@ impl UnionFind {
         let id = self.parents.len() as Id;
         self.parents.push(id);
         id
+    }
+
+    pub fn find_immutable(&self, i: Id) -> Id {
+        let mut root = i;
+        while root != self.parents[root as usize] {
+            root = self.parents[root as usize];
+        }
+        root
     }
 
     pub fn find(&mut self, i: Id) -> Id {
@@ -126,6 +141,10 @@ impl EGraph {
         Self::default()
     }
 
+    pub fn find_immutable(&self, id: Id) -> Id {
+        self.uf.find_immutable(id)
+    }
+
     pub fn find(&mut self, id: Id) -> Id {
         self.uf.find(id)
     }
@@ -200,6 +219,9 @@ impl EGraph {
 
             let new_root = self.uf.union(root_a, root_b);
             let old_root = if new_root == root_a { root_b } else { root_a };
+
+            let old_class_enodes = std::mem::take(&mut self.classes[old_root as usize]);
+            self.classes[new_root as usize].extend(old_class_enodes);
 
             // Merge parents from old_root into new_root
             let old_parents = self.parents.remove(&old_root).unwrap_or_default();
