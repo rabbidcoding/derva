@@ -4,6 +4,7 @@
 // INVARIANT: origin-core is pure data + semantics; zero I/O, zero async runtime.
 
 pub mod causal_status;
+pub mod codec;
 pub mod distinction;
 pub mod evidence;
 pub mod object;
@@ -15,6 +16,10 @@ pub mod state;
 pub mod status;
 
 pub use causal_status::{CausalError, CausalStatus};
+pub use codec::{
+    decode_bytes_bounded, decode_exact, decode_str_bounded, decode_varint, encode_bytes_bounded,
+    encode_str_bounded, encode_varint, CodecError, DEFAULT_MAX_BOUND,
+};
 pub use distinction::Distinction;
 pub use evidence::{EvidenceRecord, SupportKind};
 pub use object::{Canonical, Claim, Evidence, Obligation, Operator};
