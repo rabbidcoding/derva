@@ -1,189 +1,175 @@
 #![forbid(unsafe_code)]
 
-// INVARIANT: Counterfactual branch does not modify real root 100%; external effect capabilities absent by construction; fork creation p99 < 1ms for metadata-only fork.
-// KPI: 100% real root immutability; 0 real-world effect capabilities in fork; p99 creation latency < 1ms.
+// INVARIANT: Counterfactual branch modifies real root 0%; external effect capabilities absent by construction; fork creation p99 < 1ms.
+// KPI: 0 mutations to original state; 0 real intervention capabilities by construction; p99 fork creation < 1ms.
 
+use origin_core::state::TxnError;
 use origin_core::{ObjectKind, State, StateTxn, ORID};
 use std::collections::HashSet;
+use std::time::Instant;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Capability {
     ReadState,
     SimulateHypothesis,
-    RealWorldEffect,
+    ExtractActiveSlice,
 }
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CounterfactualError {
-    CapabilityViolation(Capability),
-    BaseStateMutated,
-}
-
-impl std::fmt::Display for CounterfactualError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CounterfactualError::CapabilityViolation(cap) => {
-                write!(
-                    f,
-                    "Capability violation: Real-world effect {:?} disabled by construction in counterfactual branch",
-                    cap
-                )
-            }
-            CounterfactualError::BaseStateMutated => {
-                write!(f, "Base state mutation error")
-            }
-        }
-    }
-}
-
-impl std::error::Error for CounterfactualError {}
 
 // AUDIT-LENSES: Torvalds, Thompson, Wozniak
 #[derive(Debug, Clone)]
 pub struct CounterfactualFork {
+    pub parent_commit_id: ORID,
     pub fork_id: ORID,
-    pub parent_commit: ORID,
-    pub base_state_root: ORID,
-    pub fork_state: State,
+    pub state: State,
     pub capabilities: HashSet<Capability>,
+    pub creation_duration_us: u64,
 }
 
 impl CounterfactualFork {
-    /// Creates a lightweight metadata-only copy-on-write fork from base state.
-    /// INVARIANT: External effect capabilities absent by construction.
-    /// KPI: Fork creation latency < 1ms.
-    pub fn create_fork(
-        parent_commit: ORID,
-        base_state: &State,
-    ) -> Result<Self, CounterfactualError> {
-        let base_root = ORID::compute(
-            ObjectKind::Commit,
-            format!("{:?}", base_state.schema_version).as_bytes(),
-        );
-        let fork_seed = format!("fork:{}:{}", parent_commit, base_root);
+    /// Creates an isolated copy-on-write counterfactual branch from base State.
+    /// INVARIANT: External effect capabilities ABSENT by construction.
+    pub fn fork(base_state: &State, parent_commit_id: ORID) -> Self {
+        let start = Instant::now();
+
+        let fork_seed = format!("{}:{}", parent_commit_id, base_state.schema_version);
         let fork_id = ORID::compute(ObjectKind::Commit, fork_seed.as_bytes());
 
-        // Copy-on-write branch: clones state lazily
+        // CoW clone of authoritative State
         let fork_state = base_state.clone();
 
-        // Capabilities strictly isolated: ReadState and SimulateHypothesis allowed, RealWorldEffect strictly ABSENT
+        // Capabilities initialized WITHOUT real intervention or external write abilities
         let mut capabilities = HashSet::new();
         capabilities.insert(Capability::ReadState);
         capabilities.insert(Capability::SimulateHypothesis);
+        capabilities.insert(Capability::ExtractActiveSlice);
 
-        Ok(Self {
+        let duration_us = start.elapsed().as_micros() as u64;
+
+        Self {
+            parent_commit_id,
             fork_id,
-            parent_commit,
-            base_state_root: base_root,
-            fork_state,
+            state: fork_state,
             capabilities,
-        })
+            creation_duration_us: duration_us,
+        }
     }
 
     pub fn capabilities(&self) -> &HashSet<Capability> {
         &self.capabilities
     }
 
-    /// Evaluates execution permission. Real-world effects are rejected by construction.
-    pub fn verify_capability(&self, required: Capability) -> Result<(), CounterfactualError> {
-        if !self.capabilities.contains(&required) {
-            return Err(CounterfactualError::CapabilityViolation(required));
-        }
-        Ok(())
+    pub fn allows_capability(&self, cap: &Capability) -> bool {
+        self.capabilities.contains(cap)
     }
 
-    /// Applies hypothetical mutation on the fork without modifying base state.
-    pub fn apply_hypothetical_txn(&mut self, txn: StateTxn) -> Result<State, CounterfactualError> {
-        self.verify_capability(Capability::SimulateHypothesis)?;
-        let new_state = txn
-            .commit()
-            .map_err(|_| CounterfactualError::BaseStateMutated)?;
-        self.fork_state = new_state.clone();
-        Ok(new_state)
+    /// Applies mutations isolated exclusively to this counterfactual fork.
+    pub fn apply_txn(&mut self, txn: StateTxn) -> Result<(), TxnError> {
+        self.state = txn.commit()?;
+        Ok(())
+    }
+}
+
+pub trait StateCounterfactualExt {
+    fn fork_counterfactual(&self, parent_commit_id: ORID) -> Result<CounterfactualFork, String>;
+}
+
+impl StateCounterfactualExt for State {
+    fn fork_counterfactual(&self, parent_commit_id: ORID) -> Result<CounterfactualFork, String> {
+        Ok(CounterfactualFork::fork(self, parent_commit_id))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use origin_core::Claim;
-    use std::time::Instant;
+    use origin_core::object::Claim;
+    use origin_core::status::Status;
 
     #[test]
     fn test_counterfactual_branch_does_not_modify_real_root_100_percent() {
-        let base_state = State::new();
-        let initial_graph_len = base_state.graph.len();
-        let parent_commit = ORID::compute(ObjectKind::Commit, b"parent_01");
+        let real_root = State::new();
+        let parent_id = ORID::compute(ObjectKind::Commit, b"head_commit");
 
-        let mut cf = CounterfactualFork::create_fork(parent_commit, &base_state).unwrap();
+        let mut cf_fork = real_root.fork_counterfactual(parent_id).unwrap();
 
-        // Perform hypothetical mutations on counterfactual fork
-        let mut txn = StateTxn::new(cf.fork_state.clone());
+        // Mutate counterfactual fork state
+        let mut txn = StateTxn::new(cf_fork.state.clone());
         let claim_id = ORID::compute(ObjectKind::Claim, b"hypothetical_claim");
         txn.add_claim(Claim {
             id: claim_id,
-            statement: "What if X happens?".to_string(),
-            status: origin_core::Status::Hypothesis,
+            statement: "Hypothetical counterfactual statement".to_string(),
+            status: Status::Hypothesis,
             provenance_roots: vec![],
         });
+        cf_fork.apply_txn(txn).unwrap();
 
-        let updated_fork_state = cf.apply_hypothetical_txn(txn).unwrap();
+        // Assert counterfactual fork HAS the claim
+        assert_eq!(cf_fork.state.graph.len(), 1);
 
-        // Fork state HAS the new claim
-        assert_eq!(updated_fork_state.graph.len(), 1);
-        assert_eq!(cf.fork_state.graph.len(), 1);
-
-        // Real root base_state MUST remain 100% unmodified!
+        // Assert real_root remains 100% UNTOUCHED
         assert_eq!(
-            base_state.graph.len(),
-            initial_graph_len,
-            "Real base state root MUST be 100% unmodified"
+            real_root.graph.len(),
+            0,
+            "Real root MUST NOT be modified by counterfactual branch operations"
         );
     }
 
     #[test]
     fn test_external_effect_capabilities_absent_by_construction() {
-        let base_state = State::new();
-        let parent_commit = ORID::compute(ObjectKind::Commit, b"parent_01");
+        let real_root = State::new();
+        let parent_id = ORID::compute(ObjectKind::Commit, b"head_commit");
+        let cf_fork = real_root.fork_counterfactual(parent_id).unwrap();
 
-        let cf = CounterfactualFork::create_fork(parent_commit, &base_state).unwrap();
+        let caps = cf_fork.capabilities();
 
-        // AUDIT-LENSES: Torvalds, Thompson, Wozniak
-        assert!(
-            !cf.capabilities().contains(&Capability::RealWorldEffect),
-            "Real-world effect capability MUST be absent by construction"
-        );
+        // Assert allowed capabilities are strictly simulated/read
+        assert!(caps.contains(&Capability::ReadState));
+        assert!(caps.contains(&Capability::SimulateHypothesis));
+        assert!(caps.contains(&Capability::ExtractActiveSlice));
 
-        let err = cf.verify_capability(Capability::RealWorldEffect);
-        assert_eq!(
-            err,
-            Err(CounterfactualError::CapabilityViolation(
-                Capability::RealWorldEffect
-            ))
-        );
+        // Assert no capability permits external intervention
+        assert_eq!(caps.len(), 3);
     }
 
     #[test]
-    fn test_fork_creation_p99_latency_under_1ms() {
-        let base_state = State::new();
-        let parent_commit = ORID::compute(ObjectKind::Commit, b"parent_01");
+    fn test_fork_creation_p99_under_1ms() {
+        let mut real_root = State::new();
 
-        let iterations = 1000;
-        let mut durations = Vec::with_capacity(iterations);
+        // Populate state with metadata
+        for i in 0..100 {
+            let id = ORID::compute(ObjectKind::Claim, format!("claim_{}", i).as_bytes());
+            real_root.graph.insert(
+                id,
+                Claim {
+                    id,
+                    statement: format!("Statement {}", i),
+                    status: Status::Supported,
+                    provenance_roots: vec![],
+                },
+            );
+        }
 
-        for _ in 0..iterations {
+        let parent_id = ORID::compute(ObjectKind::Commit, b"head_commit");
+        let sample_count = 1_000;
+        let mut durations = Vec::with_capacity(sample_count);
+
+        for _ in 0..sample_count {
             let start = Instant::now();
-            let _cf = CounterfactualFork::create_fork(parent_commit, &base_state).unwrap();
+            let _cf = real_root.fork_counterfactual(parent_id).unwrap();
             durations.push(start.elapsed());
         }
 
         durations.sort();
-        let p99 = durations[(iterations * 99 / 100).min(iterations - 1)];
 
-        println!("Fork creation p99 latency: {:?}", p99);
+        let p50 = durations[sample_count / 2];
+        let p99 = durations[(sample_count * 99) / 100];
+
+        println!("Fork Creation Latency: p50={:?}, p99={:?}", p50, p99);
+
+        let max_allowed = std::time::Duration::from_millis(1);
         assert!(
-            p99.as_micros() < 1000,
-            "p99 creation latency must be < 1ms (was {:?})",
+            p99 < max_allowed,
+            "p99 fork creation latency ({:?}) MUST be < 1ms",
             p99
         );
     }

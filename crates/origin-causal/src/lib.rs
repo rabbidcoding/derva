@@ -8,7 +8,7 @@ pub mod journal;
 pub mod operator;
 pub mod promotion;
 
-pub use counterfactual::{Capability, CounterfactualError, CounterfactualFork};
+pub use counterfactual::{Capability, CounterfactualFork, StateCounterfactualExt};
 pub use journal::{
     EnvironmentReceipt, InterventionJournal, InterventionOutcome, InterventionRecord, JournalError,
 };
