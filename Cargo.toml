@@ -28,6 +28,7 @@ members = [
     "crates/origin-numeric-test",
     "bench/zero_train_reasoning",
     "bench/causal_worlds",
+    "security/redteam",
 ]
 
 [workspace.package]

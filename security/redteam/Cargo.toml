@@ -1,0 +1,12 @@
+[package]
+name = "origin-redteam"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+origin-core = { path = "../../crates/origin-core" }
+origin-store = { path = "../../crates/origin-store" }
+origin-oir = { path = "../../crates/origin-oir" }
+origin-compiler = { path = "../../crates/origin-compiler" }
+origin-runtime = { path = "../../crates/origin-runtime" }
