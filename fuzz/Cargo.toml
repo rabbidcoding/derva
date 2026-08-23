@@ -1,0 +1,27 @@
+[package]
+name = "origin-fuzz"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+origin-core = { path = "../crates/origin-core" }
+origin-oir = { path = "../crates/origin-oir" }
+origin-fast = { path = "../crates/origin-fast" }
+origin-store = { path = "../crates/origin-store" }
+
+[[bin]]
+name = "fuzz_canonical"
+path = "fuzz_targets/fuzz_canonical.rs"
+
+[[bin]]
+name = "fuzz_oir"
+path = "fuzz_targets/fuzz_oir.rs"
+
+[[bin]]
+name = "fuzz_fast_bitset"
+path = "fuzz_targets/fuzz_fast_bitset.rs"
