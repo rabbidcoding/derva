@@ -138,6 +138,7 @@ impl OirInstruction {
     }
 
     /// Enforces strict opcode and result type matrix validation
+    #[inline(always)]
     pub fn validate(&self) -> Result<(), String> {
         match (self.opcode, self.result.ty) {
             (OpCode::Observe, OirType::Observation) => Ok(()),

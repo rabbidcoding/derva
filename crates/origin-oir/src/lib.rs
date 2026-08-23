@@ -6,10 +6,12 @@
 pub mod effectcheck;
 pub mod ir;
 pub mod typecheck;
+pub mod verify;
 
 pub use effectcheck::{EffectError, OirEffectChecker};
 pub use ir::{EffectKind, OirInstruction, OirModule, OirType, Value};
 pub use typecheck::{OirTypeChecker, TypeError};
+pub use verify::{OirVerifier, VerifierError};
 
 #[cfg(test)]
 mod tests {
