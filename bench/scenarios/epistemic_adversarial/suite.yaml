@@ -1,0 +1,21 @@
+# ORIGIN-Ω ZERO Epistemic Adversarial Suite
+suite_name: "epistemic_adversarial_proof_suite"
+description: "Executes 10^6 synthetic adversarial cases to ensure zero illegal VERIFIED promotions, zero circular provenance acceptances, and zero copied-source overcounts."
+
+invariants:
+  illegal_verified_promotions: 0
+  circular_provenance_acceptance: 0
+  copied_source_overcount: 0
+  proof_replay_accuracy: 1.0
+
+test_categories:
+  - category: "missing_raw_orid"
+    expected_status: "Supported" # cannot upgrade to Verified
+  - category: "circular_lineage"
+    expected_action: "Reject" # cycle insertion error
+  - category: "self_witness"
+    expected_action: "Reject" # SelfWitnessProhibited
+  - category: "active_contradiction"
+    expected_status: "Contested" # cannot upgrade to Verified
+  - category: "expired_freshness"
+    expected_status: "Reopened" # cannot upgrade to Verified

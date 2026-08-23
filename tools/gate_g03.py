@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 INVARIANT: Gate G03 closes Phase P03 only if 100% of P03 Evidence, Logic & Constraint Engine invariants are verified.
-KPI: 100% VERIFIED claims have navigable why(claim) lineage; 0 UNSAT/CONTESTED claims promoted to VERIFIED; 0 Unsafe Rust; All workspace tests PASS.
+KPI: 100% VERIFIED claims have navigable why(claim) lineage; 0 UNSAT/CONTESTED claims promoted to VERIFIED; 0 Unsafe Rust; 1e6 Adversarial Cases PASS.
 """
 
 import sys
@@ -64,6 +64,7 @@ def main():
         ("Workspace Cargo Check", "cargo check --workspace"),
         ("Strict Clippy Audit (-D warnings)", "cargo clippy --workspace -- -D warnings"),
         ("Evidence & Logic Engine Test Suite", "cargo test -p origin-evidence -p origin-verify -p origin-logic -p origin-constraints"),
+        ("1e6 Epistemic Adversarial Proof Suite", "cargo test --test epistemic_adversarial"),
         ("Full Workspace Test Suite", "cargo test --workspace"),
     ]
 

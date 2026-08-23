@@ -8,3 +8,8 @@ license.workspace = true
 [dependencies]
 origin-core = { path = "../origin-core" }
 origin-kernel = { path = "../origin-kernel" }
+
+[dev-dependencies]
+origin-evidence = { path = "../origin-evidence" }
+origin-logic = { path = "../origin-logic" }
+origin-constraints = { path = "../origin-constraints" }
