@@ -32,6 +32,7 @@ def check_unsafe_code_zero(root: Path) -> bool:
         "origin-logic",
         "origin-constraints",
         "origin-search",
+        "origin-egraph",
     ]
     unsafe_pattern = re.compile(r'\bunsafe\b\s*(\{|fn|trait|impl)')
     unsafe_found = 0

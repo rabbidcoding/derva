@@ -23,7 +23,7 @@ def run_command(cmd: str, cwd: Path) -> bool:
 
 def check_unsafe_code_zero(root: Path) -> bool:
     print("[G02 GATE] Checking Unsafe Rust count in authoritative crates...")
-    crates = ["origin-core", "origin-kernel", "origin-store", "origin-evidence", "origin-logic", "origin-verify", "origin-constraints", "origin-search"]
+    crates = ["origin-core", "origin-kernel", "origin-store", "origin-evidence", "origin-logic", "origin-verify", "origin-constraints", "origin-search", "origin-egraph"]
     unsafe_pattern = re.compile(r'\bunsafe\b\s*(\{|fn|trait|impl)')
     unsafe_found = 0
 
