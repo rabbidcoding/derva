@@ -6,11 +6,16 @@
 pub mod ao;
 pub mod astar;
 pub mod ida;
+pub mod query;
 pub mod select;
 
 pub use ao::{AndOrBranch, AndOrPlanDomain, AoStarPlanner, HyperNodeKind};
 pub use astar::{AStarPlanner, AdmissibleHeuristic, PlanDomain, PlanError, PlanNode, PlanResult};
 pub use ida::IdaStarPlanner;
+pub use query::{
+    EpistemicQuery, EpistemicQueryPlanner, QueryBudget, QueryExecutionRecord, QueryOracle,
+    QueryPlanError, WorldStateHypothesis,
+};
 pub use select::{MemoryPressure, PlannerKind, PlannerSelector, ProblemSignature};
 
 pub fn crate_name() -> &'static str {
