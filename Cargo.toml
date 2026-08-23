@@ -31,6 +31,7 @@ members = [
     "security/redteam",
     "bench/scale",
     "bench/baselines",
+    "adapters/arc-agi-3",
 ]
 
 [workspace.package]
