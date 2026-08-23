@@ -73,7 +73,7 @@ pub enum UninformativeReason {
     InsufficientObservation,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct RetrodictionVector {
     pub applicable: u32,
     pub correct: u32,
@@ -91,13 +91,14 @@ impl RetrodictionVector {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct ProspectiveVector {
     pub issued: u32,
     pub exact_matches: u32,
     pub partial_matches: u32,
     pub contradictions: u32,
 }
+
 
 impl ProspectiveVector {
     pub fn accuracy(&self) -> f64 {
@@ -124,6 +125,18 @@ pub struct TransitionHypothesis {
     pub prospective: ProspectiveVector,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FeasibilityWitness {
+    pub object_id: u32,
+    pub bbox: [u8; 4],                     // [min_x, min_y, max_x, max_y]
+    pub predicted_delta: [i8; 2],          // [dx, dy]
+    pub predicted_target_bbox: [i16; 4],   // [new_min_x, new_min_y, new_max_x, new_max_y]
+    pub frame_width: u8,
+    pub frame_height: u8,
+    pub bounds_feasible: bool,
+    pub blocking_cause: Option<BlockingCause>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionReceipt {
     pub receipt_id: String,
@@ -136,7 +149,9 @@ pub struct PredictionReceipt {
     pub state_root: String,
     pub precondition_witness: bool,
     pub contextual_feasibility: bool,
+    pub feasibility_witness: FeasibilityWitness,
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoricalTransition {
@@ -339,65 +354,100 @@ impl ArcBridgeEngine {
         }
     }
 
-    /// Evaluates domain-agnostic spatial feasibility of an object given an action direction and frame boundary.
-    pub fn evaluate_spatial_feasibility(
+    /// Single Authoritative Spatial Feasibility Evaluator for Sub-Gate G10.2-C1.1
+    /// Checks full bounding box footprint translation against grid boundaries:
+    /// Feasible(BBox, Delta) <=> Translate(BBox, Delta) in [0, W) x [0, H)
+    pub fn evaluate_transition_feasibility(
         &self,
-        obj: &GenericObject,
-        action_id: u8,
-        frame_w: u8,
-        frame_h: u8,
-    ) -> (bool, Option<BlockingCause>) {
-        let cx = obj.centroid[0];
-        let cy = obj.centroid[1];
+        hyp: &TransitionHypothesis,
+        obs: &CanonicalObservation,
+    ) -> FeasibilityWitness {
+        let (target_id, has_event_dx_dy, event_dx, event_dy) = match &hyp.predicted_event {
+            GridEvent::ObjectMoved { id, dx, dy } => (*id, true, *dx, *dy),
+            GridEvent::ColorChanged { id, .. } | GridEvent::ObjectDisappeared { id } => (*id, false, 0, 0),
+            GridEvent::ObjectAppeared { id, .. } => (*id, false, 0, 0),
+            GridEvent::GridRestructured { .. } => (0, false, 0, 0),
+        };
 
-        match action_id {
-            1 => { // UP
-                if cy <= 1 { (false, Some(BlockingCause::Boundary)) } else { (true, None) }
+        let (dx, dy) = if has_event_dx_dy {
+            (event_dx, event_dy)
+        } else {
+            match hyp.action_id {
+                1 => (0, -3),
+                2 => (0, 3),
+                3 => (-3, 0),
+                4 => (3, 0),
+                _ => (0, 0),
             }
-            2 => { // DOWN
-                if cy >= frame_h.saturating_sub(2) { (false, Some(BlockingCause::Boundary)) } else { (true, None) }
+        };
+
+
+        let target_obj = obs
+            .objects
+            .iter()
+            .find(|o| o.id == target_id)
+            .or_else(|| obs.objects.iter().find(|o| o.pixel_count < 100))
+            .or_else(|| obs.objects.iter().min_by_key(|o| o.pixel_count))
+            .or_else(|| obs.objects.first());
+
+        if let Some(obj) = target_obj {
+            let min_x = obj.bbox[0];
+            let min_y = obj.bbox[1];
+            let max_x = obj.bbox[2];
+            let max_y = obj.bbox[3];
+
+            let new_min_x = min_x as i16 + dx as i16;
+            let new_min_y = min_y as i16 + dy as i16;
+            let new_max_x = max_x as i16 + dx as i16;
+            let new_max_y = max_y as i16 + dy as i16;
+
+            let bounds_feasible = new_min_x >= 0
+                && new_max_x < obs.frame_width as i16
+                && new_min_y >= 0
+                && new_max_y < obs.frame_height as i16;
+
+            let blocking_cause = if bounds_feasible {
+                None
+            } else {
+                Some(BlockingCause::Boundary)
+            };
+
+            FeasibilityWitness {
+                object_id: obj.id,
+                bbox: obj.bbox,
+                predicted_delta: [dx, dy],
+                predicted_target_bbox: [new_min_x, new_min_y, new_max_x, new_max_y],
+                frame_width: obs.frame_width,
+                frame_height: obs.frame_height,
+                bounds_feasible,
+                blocking_cause,
             }
-            3 => { // LEFT
-                if cx <= 1 { (false, Some(BlockingCause::Boundary)) } else { (true, None) }
+        } else {
+            FeasibilityWitness {
+                object_id: target_id,
+                bbox: [0, 0, 0, 0],
+                predicted_delta: [dx, dy],
+                predicted_target_bbox: [0, 0, 0, 0],
+                frame_width: obs.frame_width,
+                frame_height: obs.frame_height,
+                bounds_feasible: false,
+                blocking_cause: Some(BlockingCause::Boundary),
             }
-            4 => { // RIGHT
-                if cx >= frame_w.saturating_sub(2) { (false, Some(BlockingCause::Boundary)) } else { (true, None) }
-            }
-            _ => (true, None),
         }
     }
 
     /// Authoritative Experiment Quality Score (EQS) Gating: Applicable & Observable & Discriminating
-    pub fn evaluate_preconditions(&self, hyp: &TransitionHypothesis, obs: &CanonicalObservation) -> (bool, Option<UninformativeReason>, bool) {
-        match &hyp.predicted_event {
-            GridEvent::ObjectMoved { id, .. } | GridEvent::ColorChanged { id, .. } | GridEvent::ObjectDisappeared { id } => {
-                // Target active game component (pixel_count < 100) to avoid selecting static 20x20 grid background
-                let target_obj = obs
-                    .objects
-                    .iter()
-                    .find(|o| o.id == *id)
-                    .or_else(|| obs.objects.iter().find(|o| o.pixel_count < 100))
-                    .or_else(|| obs.objects.iter().min_by_key(|o| o.pixel_count));
-
-
-
-
-                if let Some(obj) = target_obj {
-                    let (feasible, cause) = self.evaluate_spatial_feasibility(obj, hyp.action_id, obs.frame_width, obs.frame_height);
-                    if hyp.requires_feasibility {
-                        (true, None, feasible) // Dual-context prediction: S_free if feasible, S_blocked if not feasible
-                    } else if !feasible {
-                        (false, Some(UninformativeReason::EffectBlocked(cause.unwrap_or(BlockingCause::Boundary))), false)
-                    } else {
-                        (true, None, true) // S_free!
-                    }
-                } else {
-                    (false, Some(UninformativeReason::TargetUnavailable), false)
-                }
-            }
-            GridEvent::ObjectAppeared { .. } | GridEvent::GridRestructured { .. } => (true, None, true),
+    pub fn evaluate_preconditions(&self, hyp: &TransitionHypothesis, obs: &CanonicalObservation) -> (bool, Option<UninformativeReason>, FeasibilityWitness) {
+        let witness = self.evaluate_transition_feasibility(hyp, obs);
+        if hyp.requires_feasibility {
+            (true, None, witness)
+        } else if !witness.bounds_feasible {
+            (false, Some(UninformativeReason::EffectBlocked(witness.blocking_cause.clone().unwrap_or(BlockingCause::Boundary))), witness)
+        } else {
+            (true, None, witness)
         }
     }
+
 
 
 
@@ -446,10 +496,20 @@ impl ArcBridgeEngine {
                 let (valid_at_res, res_reason, _) = if let Some(hyp) = self.active_hypotheses.iter().find(|h| h.id == receipt.primary_hyp_id) {
                     self.evaluate_preconditions(hyp, &req.observation)
                 } else {
-                    (true, None, true)
+                    let dummy_witness = FeasibilityWitness {
+                        object_id: 0,
+                        bbox: [0, 0, 0, 0],
+                        predicted_delta: [0, 0],
+                        predicted_target_bbox: [0, 0, 0, 0],
+                        frame_width: req.observation.frame_width,
+                        frame_height: req.observation.frame_height,
+                        bounds_feasible: true,
+                        blocking_cause: None,
+                    };
+                    (true, None, dummy_witness)
                 };
 
-                let is_free_at_issue = receipt.contextual_feasibility;
+                let is_free_at_issue = receipt.feasibility_witness.bounds_feasible;
 
                 let expected_category = if is_free_at_issue {
                     match &receipt.expected_event {
@@ -462,7 +522,6 @@ impl ArcBridgeEngine {
                 } else {
                     EventCategory::NoChange // S_blocked -> Dual-context prediction: Predict NoChange!
                 };
-
 
                 let outcome = if !valid_at_res {
                     PredictionOutcome::Uninformative(res_reason.unwrap_or(UninformativeReason::EffectBlocked(BlockingCause::Boundary)))
@@ -480,22 +539,18 @@ impl ArcBridgeEngine {
                         } else if !events.is_empty() {
                             PredictionOutcome::Contradiction
                         } else {
-                            PredictionOutcome::Uninformative(UninformativeReason::EffectBlocked(BlockingCause::Boundary))
+                            PredictionOutcome::Contradiction // Predicted move in S_free, but no move occurred!
                         }
                     } else if !events.is_empty() {
                         PredictionOutcome::Contradiction
                     } else {
-                        PredictionOutcome::Uninformative(UninformativeReason::EffectBlocked(BlockingCause::Boundary))
+                        PredictionOutcome::Contradiction
                     }
                 } else if !events.is_empty() {
                     PredictionOutcome::Contradiction
                 } else {
                     PredictionOutcome::Uninformative(UninformativeReason::EffectBlocked(BlockingCause::Boundary))
                 };
-
-
-
-
 
                 self.baseline_tracker.record_prediction(expected_category, actual_category, outcome, receipt.precondition_witness);
 
@@ -538,10 +593,12 @@ impl ArcBridgeEngine {
                                 let rg_prospective = hyp_prosp_acc - parent_prosp_acc;
 
                                 telemetry_logs.push(format!(
-                                    "[PROSPECTIVE REFINE CONFIRMED] Refined {} DERIVED_FROM {} | Context: {} | RG_retro: {:+.4} | RG_prospective: {:+.4} (Refined={:.4} vs Orig={:.4})",
+                                    "[PROSPECTIVE REFINE CONFIRMED] Refined {} DERIVED_FROM {} | Context: {} | Witness: BBox{:?}->{:?} | RG_retro: {:+.4} | RG_prospective: {:+.4} (Refined={:.4} vs Orig={:.4})",
                                     hyp_id,
                                     parent_id,
                                     if receipt.contextual_feasibility { "Free" } else { "Blocked" },
+                                    receipt.feasibility_witness.bbox,
+                                    receipt.feasibility_witness.predicted_target_bbox,
                                     rg_retro,
                                     rg_prospective,
                                     hyp_prosp_acc,
@@ -695,19 +752,19 @@ impl ArcBridgeEngine {
         });
 
         // Filter hypotheses using single authoritative precondition evaluator: Applicable & Observable
-        let active_hyps: Vec<(&TransitionHypothesis, bool, bool)> = self
+        let active_hyps: Vec<(&TransitionHypothesis, bool, FeasibilityWitness)> = self
             .active_hypotheses
             .iter()
             .filter(|h| h.status == HypothesisStatus::Supported || h.status == HypothesisStatus::Unverified)
             .map(|h| {
-                let (valid, _, is_free) = self.evaluate_preconditions(h, &req.observation);
-                (h, valid, is_free)
+                let (valid, _, witness) = self.evaluate_preconditions(h, &req.observation);
+                (h, valid, witness)
             })
-            .filter(|(h, valid, is_free)| {
+            .filter(|(h, valid, witness)| {
                 // EQS GATING: Only consider observable experiments
-                // Unrefined hypotheses require is_free == true to be observable
+                // Unrefined hypotheses require bounds_feasible == true to be observable
                 // Refined hypotheses (requires_feasibility == true) are observable in both contexts (is_free true or false)
-                *valid && (h.requires_feasibility || *is_free)
+                *valid && (h.requires_feasibility || witness.bounds_feasible)
             })
             .collect();
 
@@ -716,19 +773,19 @@ impl ArcBridgeEngine {
             let mut found = None;
 
             // First check if a refined hypothesis can be paired with another hypothesis
-            if let Some((h_ref, _valid_ref, is_free_ref)) = active_hyps.iter().find(|(h, _, _)| h.requires_feasibility) {
+            if let Some((h_ref, _valid_ref, witness_ref)) = active_hyps.iter().find(|(h, _, _)| h.requires_feasibility) {
                 if let Some((h_other, _valid_other, _)) = active_hyps.iter().find(|(h, _, _)| h.id != h_ref.id) {
-                    found = Some(((*h_ref).clone(), (*h_other).clone(), *is_free_ref));
+                    found = Some(((*h_ref).clone(), (*h_other).clone(), witness_ref.clone()));
                 }
             }
 
             if found.is_none() {
                 'outer: for i in 0..active_hyps.len() {
                     for j in (i + 1)..active_hyps.len() {
-                        let (h1, _valid1, is_free1) = active_hyps[i];
-                        let (h2, _valid2, _is_free2) = active_hyps[j];
+                        let (h1, _valid1, witness1) = &active_hyps[i];
+                        let (h2, _valid2, _witness2) = &active_hyps[j];
                         if h1.predicted_event != h2.predicted_event {
-                            found = Some((h1.clone(), h2.clone(), is_free1));
+                            found = Some(((*h1).clone(), (*h2).clone(), witness1.clone()));
                             break 'outer;
                         }
                     }
@@ -739,10 +796,7 @@ impl ArcBridgeEngine {
             None
         };
 
-
-
-
-        let selected = if let Some((h1, h2, is_free)) = discriminating_pair {
+        let selected = if let Some((h1, h2, witness)) = discriminating_pair {
             let (target_x, target_y) = if let Some(_sp_id) = spatial_action_id {
                 let num_objects = req.observation.objects.len();
                 if num_objects > 0 {
@@ -769,12 +823,13 @@ impl ArcBridgeEngine {
                 expected_event: h1.predicted_event.clone(),
                 state_root: self.current_commit_root.to_string(),
                 precondition_witness: true,
-                contextual_feasibility: is_free,
+                contextual_feasibility: witness.bounds_feasible,
+                feasibility_witness: witness.clone(),
             });
 
             telemetry_logs.push(format!(
-                "[VALID DISCRIMINATION - EQS PASS] Receipt: {} | H1: {} vs H2: {} | ContextualFeasibility: {} | ExpectedEvent: {:?}",
-                receipt_id, h1.id, h2.id, is_free, h1.predicted_event
+                "[VALID DISCRIMINATION - EQS PASS] Receipt: {} | H1: {} vs H2: {} | ContextualFeasibility: {} | Witness: BBox{:?}->{:?} | ExpectedEvent: {:?}",
+                receipt_id, h1.id, h2.id, witness.bounds_feasible, witness.bbox, witness.predicted_target_bbox, h1.predicted_event
             ));
 
             SelectedAction {
@@ -783,7 +838,7 @@ impl ArcBridgeEngine {
                 y: target_y,
                 hypothesis_id: format!("Discriminate_{}_vs_{}|Receipt:{}", h1.id, h2.id, receipt_id),
             }
-        } else if let Some((hyp, valid, is_free)) = active_hyps.first() {
+        } else if let Some((hyp, valid, witness)) = active_hyps.first() {
             let (target_x, target_y) = if let Some(_sp_id) = spatial_action_id {
                 let num_objects = req.observation.objects.len();
                 if num_objects > 0 {
@@ -810,7 +865,8 @@ impl ArcBridgeEngine {
                 expected_event: hyp.predicted_event.clone(),
                 state_root: self.current_commit_root.to_string(),
                 precondition_witness: *valid,
-                contextual_feasibility: *is_free,
+                contextual_feasibility: witness.bounds_feasible,
+                feasibility_witness: witness.clone(),
             });
 
             SelectedAction {
@@ -819,6 +875,7 @@ impl ArcBridgeEngine {
                 y: target_y,
                 hypothesis_id: format!("Probe_{}|Receipt:{}", hyp.id, receipt_id),
             }
+
         } else if let Some(sp_id) = spatial_action_id {
             let num_objects = req.observation.objects.len();
             if num_objects > 0 && self.strategy_state == StrategyState::Active {
@@ -906,3 +963,84 @@ impl ArcBridgeEngine {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::observation::{CanonicalObservation, GenericObject, GridEvent, TemporalDiff};
+
+
+    #[test]
+    fn test_footprint_feasibility_exhaustive_property() {
+        let mut mismatches = 0;
+
+        for grid_w in 2..=10u8 {
+            for grid_h in 2..=10u8 {
+                for min_x in 0..grid_w {
+                    for max_x in min_x..grid_w {
+                        for min_y in 0..grid_h {
+                            for max_y in min_y..grid_h {
+                                for dx in -10..=10i8 {
+                                    for dy in -10..=10i8 {
+
+                                        let new_min_x = min_x as i16 + dx as i16;
+                                        let new_max_x = max_x as i16 + dx as i16;
+                                        let new_min_y = min_y as i16 + dy as i16;
+                                        let new_max_y = max_y as i16 + dy as i16;
+
+                                        let is_in_grid = new_min_x >= 0
+                                            && new_max_x < grid_w as i16
+                                            && new_min_y >= 0
+                                            && new_max_y < grid_h as i16;
+
+                                        let engine = ArcBridgeEngine::new();
+                                        let dummy_obj = GenericObject {
+                                            id: 1,
+                                            color: 1,
+                                            bbox: [min_x, min_y, max_x, max_y],
+                                            centroid: [(min_x + max_x) / 2, (min_y + max_y) / 2],
+                                            pixel_count: 1,
+                                        };
+                                        let hyp = TransitionHypothesis {
+                                            id: "test".to_string(),
+                                            derived_from: None,
+                                            action_id: 3,
+                                            target_object_id: Some(1),
+                                            predicted_event: GridEvent::ObjectMoved { id: 1, dx, dy },
+                                            requires_feasibility: false,
+                                            status: HypothesisStatus::Supported,
+                                            support_count: 1,
+                                            refutation_count: 0,
+                                            retrodiction: RetrodictionVector::default(),
+                                            prospective: ProspectiveVector::default(),
+                                        };
+                                        let obs = CanonicalObservation {
+                                            step: 1,
+                                            frame_width: grid_w,
+                                            frame_height: grid_h,
+                                            objects: vec![dummy_obj],
+                                            diff: TemporalDiff {
+                                                objects_appeared: vec![],
+                                                objects_disappeared: vec![],
+                                                objects_moved: vec![],
+                                                color_changes: vec![],
+                                                events: vec![],
+                                            },
+                                        };
+
+                                        let witness = engine.evaluate_transition_feasibility(&hyp, &obs);
+                                        if witness.bounds_feasible != is_in_grid {
+                                            mismatches += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(mismatches, 0, "Exhaustive footprint feasibility property test failed with mismatches!");
+    }
+}
+
