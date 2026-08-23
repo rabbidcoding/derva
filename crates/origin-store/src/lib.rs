@@ -4,10 +4,12 @@
 // Content-addressed immutable persistence layer.
 
 pub mod commit;
+pub mod index;
 pub mod object_store;
 pub mod wal;
 
 pub use commit::{CommitDag, CommitNode};
+pub use index::{GraphIndex, RelationEdge};
 pub use object_store::{ObjectStore, StoreError};
 pub use origin_core::{Canonical, ORID};
 pub use wal::{PendingTxn, WalError, WalStatus, WriteAheadLog};
