@@ -3,11 +3,16 @@
 // ORIGIN-Ω ZERO Subsystem: origin-causal
 // Causal Operators, Counterfactuals & Structural Causal Models.
 
+pub mod compose;
 pub mod counterfactual;
 pub mod journal;
 pub mod operator;
 pub mod promotion;
 
+pub use compose::{
+    ComposedOperator, CompositionError, CompositionPolicy, CompositionProof,
+    OperatorCompositionChecker,
+};
 pub use counterfactual::{Capability, CounterfactualFork, StateCounterfactualExt};
 pub use journal::{
     EnvironmentReceipt, InterventionJournal, InterventionOutcome, InterventionRecord, JournalError,
