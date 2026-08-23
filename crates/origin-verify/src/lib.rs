@@ -1,8 +1,11 @@
 #![forbid(unsafe_code)]
 
 // ORIGIN-Ω ZERO Subsystem: origin-verify
-// Proof and obligation verification engine.
+// Proof and obligation verification engine with runtime freshness tracking and witness resolution.
 
+pub mod obligations;
+
+pub use obligations::{ObligationError, ObligationResolution, ObligationRuntime, ObligationState};
 pub use origin_core::{Status, TypedObligation};
 
 pub fn crate_name() -> &'static str {
