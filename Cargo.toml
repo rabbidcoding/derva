@@ -30,6 +30,7 @@ members = [
     "bench/causal_worlds",
     "security/redteam",
     "bench/scale",
+    "bench/baselines",
 ]
 
 [workspace.package]
