@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-08-23T08:58:56Z",
+  "audit_lenses": ["John Carmack", "Donald Knuth", "Bjarne Stroustrup"],
+  "profile_status": "VALIDATED",
+  "span_coverage_percent": 96.8,
+  "profiler_overhead_percent": 0.45,
+  "assembly_activation_eligible": true
+}

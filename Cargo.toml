@@ -17,6 +17,7 @@ members = [
     "crates/origin-codegen-rust",
     "crates/origin-codegen-jax",
     "crates/origin-compiler",
+    "crates/origin-profiler",
     "crates/origin-fast",
     "crates/origin-runtime",
     "crates/origin-cli",
