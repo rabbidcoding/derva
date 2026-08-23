@@ -3,8 +3,10 @@
 // ORIGIN-Ω ZERO Subsystem: origin-store
 // Content-addressed immutable persistence layer.
 
+pub mod commit;
 pub mod object_store;
 
+pub use commit::{CommitDag, CommitNode};
 pub use object_store::{ObjectStore, StoreError};
 pub use origin_core::{Canonical, ORID};
 
