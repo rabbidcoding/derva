@@ -1,6 +1,5 @@
-// AUDIT-LENSES: Steve Jobs, Niklaus Wirth, Donald Knuth
-// INVARIANT: Authoritative Rust bridge receiving Canonical Observation & Action Space from Python runner via stdio JSONL IPC.
-// Full Cognitive Loop: Event Induction, Categorized Hypotheses, Executable Transition World Models, Retrodiction Scoring, Loop/Stagnation Refutation, Provenance.
+// AUDIT-LENSES: Steve Jobs, Niklaus Wirth, Donald Knuth, Alan Turing
+// INVARIANT: Authoritative Rust bridge for ARC-AGI-3. Implements Strategy vs Hypothesis separation, Transition Hypotheses with Executable Predictions, Hypothesis Discrimination Action Selection, Retrodiction Matrix, and State Provenance.
 
 use std::collections::VecDeque;
 use crate::action::{ArcAction, ArcActionSpace, SelectedAction};
@@ -22,16 +21,60 @@ pub struct StepResponse {
     pub state_root: String,
 }
 
-/// Four Distinct Hypothesis Categories in DERVA
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum DervaHypothesis {
-    ObjectPersistence { obj_id: u32 },
-    ActionSemantics { action_id: u8, expected_event: GridEvent },
-    DynamicsModel { action_id: u8, retrodiction_score: f64 },
-    GoalDiscovery { candidate_goal: String },
+/// Exploration Strategy Lifecycle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StrategyState {
+    Active,
+    Stagnant,
+    Deprioritized,
+    Failed,
 }
 
-#[derive(Debug, Clone)]
+/// World Model Hypothesis Epistemic Lifecycle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HypothesisStatus {
+    Unverified,
+    Supported,
+    Contested,
+    Refuted,
+    Verified,
+}
+
+/// Executable Transition Model Hypothesis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransitionHypothesis {
+    pub id: String,
+    pub action_id: u8,
+    pub target_object_id: Option<u32>,
+    pub predicted_event: GridEvent,
+    pub status: HypothesisStatus,
+    pub support_count: u32,
+    pub refutation_count: u32,
+    pub applicable_retrodictions: u32,
+    pub correct_retrodictions: u32,
+}
+
+impl TransitionHypothesis {
+    pub fn retrodiction_score(&self) -> f64 {
+        if self.applicable_retrodictions == 0 {
+            0.0
+        } else {
+            self.correct_retrodictions as f64 / self.applicable_retrodictions as f64
+        }
+    }
+}
+
+/// Active Prediction Receipt prior to observation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PredictionReceipt {
+    pub hypothesis_id: String,
+    pub step: u64,
+    pub action_id: u8,
+    pub target_coords: Option<[u8; 2]>,
+    pub expected_event: GridEvent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoricalTransition {
     pub step: u64,
     pub action_id: u8,
@@ -46,15 +89,15 @@ pub struct ArcBridgeEngine {
     pub last_action: Option<SelectedAction>,
     pub step_counter: u64,
     pub history_trace: Vec<HistoricalTransition>,
-    pub hypotheses: Vec<DervaHypothesis>,
+    // Separation of Strategy vs World Model Hypotheses
+    pub strategy_state: StrategyState,
+    pub active_hypotheses: Vec<TransitionHypothesis>,
+    pub pending_prediction: Option<PredictionReceipt>,
     pub supported_hypotheses: u64,
     pub refuted_hypotheses: u64,
-    pub successful_rule_action: Option<u8>,
     pub target_object_idx: usize,
-    // Stagnation & Loop Detection
     pub recent_state_roots: VecDeque<String>,
     pub stagnation_counter: u32,
-    pub current_strategy_refuted: bool,
 }
 
 impl ArcBridgeEngine {
@@ -65,21 +108,21 @@ impl ArcBridgeEngine {
             last_action: None,
             step_counter: 0,
             history_trace: Vec::new(),
-            hypotheses: Vec::new(),
+            strategy_state: StrategyState::Active,
+            active_hypotheses: Vec::new(),
+            pending_prediction: None,
             supported_hypotheses: 0,
             refuted_hypotheses: 0,
-            successful_rule_action: None,
             target_object_idx: 0,
             recent_state_roots: VecDeque::with_capacity(10),
             stagnation_counter: 0,
-            current_strategy_refuted: false,
         }
     }
 
     pub fn process_step(&mut self, req: StepRequest) -> StepResponse {
         self.step_counter += 1;
 
-        // 1. EVENT INDUCTION & RETRODICTION FALSIFICATION
+        // 1. EVENT INDUCTION & PREDICTION OUTCOME EVALUATION
         let events = if let Some(prev_obs) = &self.last_observation {
             req.observation.compute_events(prev_obs)
         } else {
@@ -97,28 +140,73 @@ impl ArcBridgeEngine {
                 events_observed: events.clone(),
                 state_root: self.current_commit_root.to_string(),
             };
-            self.history_trace.push(transition);
+            self.history_trace.push(transition.clone());
 
-            // Evaluate Hypotheses & Retrodiction Falsification
-            if !events.is_empty() {
-                self.supported_hypotheses += 1;
-                self.successful_rule_action = Some(prev_act.action_id);
-                self.target_object_idx = self.target_object_idx.wrapping_add(1);
-                self.stagnation_counter = 0;
-                self.current_strategy_refuted = false;
-            } else {
-                self.refuted_hypotheses += 1;
+            // Check Active Prediction Receipt
+            if let Some(receipt) = self.pending_prediction.take() {
+                let matched = events.iter().any(|e| e == &receipt.expected_event);
+                if let Some(hyp) = self.active_hypotheses.iter_mut().find(|h| h.id == receipt.hypothesis_id) {
+                    if matched {
+                        hyp.support_count += 1;
+                        hyp.status = HypothesisStatus::Supported;
+                        self.supported_hypotheses += 1;
+                    } else {
+                        hyp.refutation_count += 1;
+                        if hyp.refutation_count >= 2 {
+                            hyp.status = HypothesisStatus::Refuted;
+                            self.refuted_hypotheses += 1;
+                        } else {
+                            hyp.status = HypothesisStatus::Contested;
+                        }
+                    }
+                }
+            }
+
+            // Induce new Transition Hypotheses from freshly observed events
+            for ev in &events {
+                let hyp_id = format!("H_trans_act{}_ev{:?}", prev_act.action_id, ev);
+                if !self.active_hypotheses.iter().any(|h| h.id == hyp_id) {
+                    let mut hyp = TransitionHypothesis {
+                        id: hyp_id,
+                        action_id: prev_act.action_id,
+                        target_object_id: None,
+                        predicted_event: ev.clone(),
+                        status: HypothesisStatus::Unverified,
+                        support_count: 1,
+                        refutation_count: 0,
+                        applicable_retrodictions: 0,
+                        correct_retrodictions: 0,
+                    };
+
+                    // RETRODICTION MATRIX: Evaluate candidate hypothesis over full history trace
+                    for past_trans in &self.history_trace {
+                        if past_trans.action_id == hyp.action_id {
+                            hyp.applicable_retrodictions += 1;
+                            if past_trans.events_observed.iter().any(|e| e == &hyp.predicted_event) {
+                                hyp.correct_retrodictions += 1;
+                            }
+                        }
+                    }
+
+                    self.active_hypotheses.push(hyp);
+                }
+            }
+
+            // Strategy Stagnation Update
+            if events.is_empty() {
                 self.stagnation_counter += 1;
+            } else {
+                self.stagnation_counter = 0;
+                self.strategy_state = StrategyState::Active;
             }
         }
 
-        // 2. STAGNATION & STATE LOOP DETECTOR
+        // 2. STRATEGY REVISION & CYCLE DETECTOR
         let current_root_str = self.current_commit_root.to_string();
-        if self.recent_state_roots.contains(&current_root_str) {
-            // State cycle detected (e.g. S1 -> S2 -> S1)
-            self.current_strategy_refuted = true;
-            self.successful_rule_action = None;
-            self.target_object_idx = self.target_object_idx.wrapping_add(3); // Jump target index
+        if self.recent_state_roots.contains(&current_root_str) || self.stagnation_counter >= 6 {
+            self.strategy_state = StrategyState::Deprioritized;
+            self.target_object_idx = self.target_object_idx.wrapping_add(3);
+            self.stagnation_counter = 0;
         }
 
         if self.recent_state_roots.len() >= 8 {
@@ -126,13 +214,7 @@ impl ArcBridgeEngine {
         }
         self.recent_state_roots.push_back(current_root_str);
 
-        if self.stagnation_counter >= 6 {
-            self.current_strategy_refuted = true;
-            self.successful_rule_action = None;
-            self.stagnation_counter = 0;
-        }
-
-        // 3. RETRODICTED ACTIVE QUERY SELECTION
+        // 3. ACTION SELECTION: HYPOTHESIS DISCRIMINATION VS COVERAGE EXPLORATION
         let candidate_actions = &req.action_space.actions;
         let num_candidates = candidate_actions.len();
 
@@ -141,9 +223,48 @@ impl ArcBridgeEngine {
             _ => None,
         });
 
-        let selected = if let Some(sp_id) = spatial_action_id {
+        // Search for competing supported/unverified hypotheses to discriminate
+        let candidate_hyp = self.active_hypotheses.iter().find(|h| {
+            h.status == HypothesisStatus::Supported || h.status == HypothesisStatus::Unverified
+        }).cloned();
+
+        let selected = if let Some(hyp) = candidate_hyp {
+            // HYPOTHESIS DISCRIMINATION MODE
+            let (target_x, target_y) = if let Some(_sp_id) = spatial_action_id {
+
+                let num_objects = req.observation.objects.len();
+                if num_objects > 0 {
+                    let obj = &req.observation.objects[self.target_object_idx % num_objects];
+                    (Some(obj.centroid[0]), Some(obj.centroid[1]))
+                } else {
+                    (Some(15), Some(15))
+                }
+            } else {
+                (None, None)
+            };
+
+            // Register Prediction Receipt prior to step execution
+            self.pending_prediction = Some(PredictionReceipt {
+                hypothesis_id: hyp.id.clone(),
+                step: self.step_counter,
+                action_id: hyp.action_id,
+                target_coords: match (target_x, target_y) {
+                    (Some(x), Some(y)) => Some([x, y]),
+                    _ => None,
+                },
+                expected_event: hyp.predicted_event.clone(),
+            });
+
+            SelectedAction {
+                action_id: hyp.action_id,
+                x: target_x,
+                y: target_y,
+                hypothesis_id: format!("Discriminate_{}|Retrodict:{:.2}", hyp.id, hyp.retrodiction_score()),
+            }
+        } else if let Some(sp_id) = spatial_action_id {
+            // COVERAGE EXPLORATION SWEEP MODE
             let num_objects = req.observation.objects.len();
-            if num_objects > 0 && !self.current_strategy_refuted {
+            if num_objects > 0 && self.strategy_state == StrategyState::Active {
                 let target_idx = self.target_object_idx % num_objects;
                 let target_obj = &req.observation.objects[target_idx];
                 let tx = target_obj.centroid[0];
@@ -153,10 +274,9 @@ impl ArcBridgeEngine {
                     action_id: sp_id,
                     x: Some(tx),
                     y: Some(ty),
-                    hypothesis_id: format!("H_dynamics_obj_{}_x{}_y{}", target_obj.id, tx, ty),
+                    hypothesis_id: format!("Explore_obj_{}_x{}_y{}", target_obj.id, tx, ty),
                 }
             } else {
-                // Active Exploration Sweep when stuck / strategy refuted
                 let grid_w = req.observation.frame_width.max(1) as u64;
                 let grid_h = req.observation.frame_height.max(1) as u64;
                 let step_offset = self.step_counter + (self.target_object_idx as u64 * 7);
@@ -167,35 +287,23 @@ impl ArcBridgeEngine {
                     action_id: sp_id,
                     x: Some(tx),
                     y: Some(ty),
-                    hypothesis_id: format!("H_active_query_sweep_x{}_y{}", tx, ty),
+                    hypothesis_id: format!("ExplorationSweep_x{}_y{}", tx, ty),
                 }
             }
         } else if num_candidates > 0 {
-            let choice_idx = if let Some(act) = self.successful_rule_action {
-                if !self.current_strategy_refuted {
-                    candidate_actions.iter().position(|a| match a {
-                        ArcAction::Simple { id } => *id == act,
-                        ArcAction::Spatial { id, .. } => *id == act,
-                    }).unwrap_or(self.step_counter as usize % num_candidates)
-                } else {
-                    (self.step_counter as usize + 1) % num_candidates
-                }
-            } else {
-                self.step_counter as usize % num_candidates
-            };
-
+            let choice_idx = self.step_counter as usize % num_candidates;
             match &candidate_actions[choice_idx] {
                 ArcAction::Simple { id } => SelectedAction {
                     action_id: *id,
                     x: None,
                     y: None,
-                    hypothesis_id: format!("H_simple_action_{}", id),
+                    hypothesis_id: format!("SimpleExplore_{}", id),
                 },
                 ArcAction::Spatial { id, x_min, x_max, y_min, y_max } => SelectedAction {
                     action_id: *id,
                     x: Some((*x_min + *x_max) / 2),
                     y: Some((*y_min + *y_max) / 2),
-                    hypothesis_id: format!("H_spatial_action_{}", id),
+                    hypothesis_id: format!("SpatialExplore_{}", id),
                 },
             }
         } else {
@@ -207,7 +315,7 @@ impl ArcBridgeEngine {
             }
         };
 
-        // 4. UPDATE ORID STATE ROOT PROVENANCE
+        // 4. UPDATE COMMIT ROOT & PERSIST OBSERVATION
         self.last_observation = Some(req.observation);
         self.last_action = Some(selected.clone());
 
@@ -232,7 +340,7 @@ mod tests {
     use crate::observation::{CanonicalObservation, TemporalDiff};
 
     #[test]
-    fn test_arc_bridge_engine_event_induction() {
+    fn test_arc_bridge_engine_strategy_vs_hypothesis() {
         let mut engine = ArcBridgeEngine::new();
 
         let req = StepRequest {
@@ -258,5 +366,6 @@ mod tests {
         let resp = engine.process_step(req);
         assert_eq!(resp.step, 1);
         assert_eq!(resp.action.action_id, 1);
+        assert_eq!(engine.strategy_state, StrategyState::Active);
     }
 }
